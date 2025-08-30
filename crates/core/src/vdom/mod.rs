@@ -1,5 +1,5 @@
 pub trait IntoElement {
-    type Element;
+    type Element: crate::Component;
     fn into_element(self) -> Self::Element;
 }
 

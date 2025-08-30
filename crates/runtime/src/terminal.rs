@@ -5,10 +5,10 @@
 
 use crossterm::{
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use ratatui::{backend::CrosstermBackend, Terminal};
-use std::io::{self, stdout, Stdout};
+use ratatui::{Terminal, backend::CrosstermBackend};
+use std::io::{self, Stdout, stdout};
 
 /// A managed terminal instance that handles setup and cleanup
 pub struct ManagedTerminal {
@@ -199,7 +199,7 @@ mod tests {
     #[test]
     fn test_module_exports() {
         // Verify all expected items are exported from the module
-        use crate::terminal::{restore_terminal, setup_terminal, ManagedTerminal};
+        use crate::terminal::{ManagedTerminal, restore_terminal, setup_terminal};
 
         // Test that types and functions are accessible
         let _terminal_type: Option<ManagedTerminal> = None;

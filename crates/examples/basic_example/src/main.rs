@@ -17,7 +17,7 @@ use ratatui::{
     text::{Line, Span, Text},
     widgets::{Block, Borders, Paragraph, Widget},
 };
-use std::io::{self, stdout, Write};
+use std::io::{self, Write, stdout};
 
 /// Represents different types of content that can be rendered
 #[derive(Debug)]

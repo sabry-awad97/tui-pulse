@@ -1,4 +1,5 @@
-use pulse_core::IntoElement;
+use crate::terminal::setup_terminal;
+use pulse_core::{Component, IntoElement};
 
 /// Renders a component-based TUI application
 ///
@@ -19,22 +20,25 @@ use pulse_core::IntoElement;
 ///
 /// render(|| MyComponent).unwrap();
 /// ```
-pub fn render<F, T>(app_fn: F) -> Result<(), Box<dyn std::error::Error>>
+pub fn render<F, T>(initializer: F) -> Result<(), Box<dyn std::error::Error>>
 where
     F: Fn() -> T,
     T: IntoElement,
 {
+    // Initialize terminal backend
+    let mut terminal = setup_terminal()?;
+
     // Create the element instance and convert it
-    let _element = app_fn().into_element();
+    let element = initializer().into_element();
 
-    // TODO: Set up terminal, event loop, and rendering
-    // This is where we would:
-    // 1. Initialize the terminal backend
-    // 2. Create the main event loop
-    // 3. Handle rendering and events
-    // 4. Clean up terminal on exit
+    // Render the component once
+    terminal.draw(|frame| {
+        element.render(frame.area(), frame);
+    })?;
 
-    println!("TUI Pulse Runtime - Component rendering not yet implemented");
+    // Keep the terminal open briefly to see the result
+    std::thread::sleep(std::time::Duration::from_millis(2000));
+
     Ok(())
 }
 
@@ -65,16 +69,22 @@ where
     Fut: std::future::Future<Output = T>,
     T: IntoElement,
 {
+    // Initialize terminal backend
+    let mut terminal = setup_terminal()?;
+
     // Create the element instance and convert it
-    let _element = app_fn().await.into_element();
+    let element = app_fn().await.into_element();
 
-    // TODO: Set up async terminal, event loop, and rendering
-    // This is where we would:
-    // 1. Initialize the terminal backend
-    // 2. Create the async event loop with tokio/async-std
-    // 3. Handle async rendering and events
-    // 4. Clean up terminal on exit
+    // Get terminal size for rendering
+    let size = terminal.size()?;
 
-    println!("TUI Pulse Runtime - Async component rendering not yet implemented");
+    // Render the component once
+    terminal.draw(|frame| {
+        element.render(size, frame);
+    })?;
+
+    // Keep the terminal open briefly to see the result
+    tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
+
     Ok(())
 }
