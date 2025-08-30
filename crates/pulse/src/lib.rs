@@ -1,8 +1,9 @@
 pub use crossterm;
 pub use pulse_core::{
-    Component, Element, FrameExt, IntoElement,
+    Component, Element, IntoElement,
     exit::request_exit,
     hooks::{
+        event::{global_events::on_global_event, use_event},
         signal::{GlobalSignal, Signal, use_global_signal},
         state::{StateHandle, StateSetter, use_state},
     },

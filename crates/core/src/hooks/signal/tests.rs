@@ -613,7 +613,7 @@ fn test_reset() {
         INIT_COUNT.fetch_add(1, Ordering::SeqCst);
         0
     });
-    
+
     let signal = &TEST_RESET_SIGNAL;
 
     // Initial state

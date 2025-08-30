@@ -1,8 +1,5 @@
-use crossterm::event::{KeyCode, KeyEvent};
-use pulse::{
-    crossterm::event::{Event, KeyEventKind},
-    prelude::*,
-};
+use crossterm::event::{Event as CEvent, KeyCode};
+use pulse::{crossterm::event::KeyEventKind, prelude::*};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
@@ -82,81 +79,104 @@ impl Component for UserGreeting {
 // The main app component
 struct App;
 
+impl App {
+    fn new() -> Self {
+        // Register a global event handler for the 't' key
+        on_global_event(KeyCode::Char('t'), || {
+            let current = USER_NAME.get();
+            if current == "Test" {
+                USER_NAME.set("Guest".to_string());
+            } else {
+                USER_NAME.set("Test".to_string());
+            }
+            true // Stop event propagation
+        });
+
+        App
+    }
+}
+
+// 实现Component trait于App结构体
 impl Component for App {
     fn on_mount(&self) {
-        // Set initial values for our signals
-        COUNTER.set(0);
-        USER_NAME.set("Guest".to_string());
+        // Set up a global keyboard event handler
+        on_global_event(KeyCode::Char('q'), || {
+            request_exit();
+            false
+        });
+
+        // Set up a global keyboard event handler for the counter
+        on_global_event(KeyCode::Char('+'), || {
+            let counter = COUNTER.get();
+            COUNTER.set(counter + 1);
+            true
+        });
+
+        on_global_event(KeyCode::Char('-'), || {
+            let counter = COUNTER.get();
+            COUNTER.set(counter - 1);
+            true
+        });
     }
 
     fn render(&self, area: Rect, frame: &mut Frame) {
-        // Create a layout with three sections: header, content, and controls
-        let chunks = Layout::default()
+        // Create a vertical layout
+        let layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(3), // Header
-                Constraint::Min(0),    // Content
-                Constraint::Length(3), // Controls
+                Constraint::Min(3),    // Content
+                Constraint::Length(3), // Footer
             ])
             .split(area);
 
-        // Header
-        let title = Paragraph::new("Global Signal Example 🚀")
-            .style(Style::default().add_modifier(Modifier::BOLD))
-            .alignment(Alignment::Center);
-        frame.render_widget(title, chunks[0]);
-
-        // Content area with counter and user greeting
-        let content = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(50), // Counter
-                Constraint::Percentage(50), // User greeting
-            ])
-            .split(chunks[1]);
-
-        // Render the counter display
-        CounterDisplay.render(content[0], frame);
-
-        // Render the user greeting
-        UserGreeting.render(content[1], frame);
-
-        // Controls
-        let instructions = Paragraph::new(vec![
-            Line::from("Press 'q' to quit, '+' to increment, '-' to decrement"),
-            Line::from("Press 'r' to reset counter, 'n' to change name"),
-        ])
-        .style(Style::default().fg(Color::Gray))
-        .alignment(Alignment::Center)
-        .block(Block::default().borders(Borders::ALL).title("Controls"));
-
-        frame.render_widget(instructions, chunks[2]);
-
-        // Handle keyboard input
-        if let Some(Event::Key(KeyEvent { code, kind, .. })) = frame.event()
-            && *kind == KeyEventKind::Press
+        // Handle events using the use_event hook
+        if let Some(CEvent::Key(key)) = use_event()
+            && key.kind == KeyEventKind::Press
+            && let KeyCode::Char('n') = key.code
         {
-            match code {
-                KeyCode::Char('q') => request_exit(),
-                KeyCode::Char('+') => COUNTER.update(|c| c + 1),
-                KeyCode::Char('-') => COUNTER.update(|c| c - 1),
-                KeyCode::Char('r') => COUNTER.reset(),
-                KeyCode::Char('n') => {
-                    // Toggle between Guest and User
-                    let current = USER_NAME.get();
-                    if current == "Guest" {
-                        USER_NAME.set("User".to_string());
-                    } else {
-                        USER_NAME.set("Guest".to_string());
-                    }
-                }
-                _ => {}
+            let current = USER_NAME.get();
+            if current == "User" {
+                USER_NAME.set("Guest".to_string());
+            } else {
+                USER_NAME.set("User".to_string());
             }
         }
+
+        // Render header
+        let header = Paragraph::new("Signal Example (Press 'q' to quit)")
+            .alignment(Alignment::Center)
+            .block(Block::default().borders(Borders::BOTTOM));
+        frame.render_widget(header, layout[0]);
+
+        // Render content
+        let content = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(8), // Counter
+                Constraint::Length(6), // User greeting (increased from 3 to 6 to fit content and borders)
+            ])
+            .split(layout[1]);
+
+        // Render counter
+        CounterDisplay.render(content[0], frame);
+
+        // Render user greeting
+        UserGreeting.render(content[1], frame);
+
+        // Render footer with instructions
+        let instructions = vec![
+            Line::from("Press 'n' to toggle between User and Guest"),
+            Line::from("Press 't' to test global event"),
+            Line::from("Press 'q' to quit"),
+        ];
+        let footer = Paragraph::new(instructions)
+            .alignment(Alignment::Center)
+            .block(Block::default().borders(Borders::TOP));
+        frame.render_widget(footer, layout[2]);
     }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Render the app with hooks support
-    pulse::render(|| App)
+    pulse::render(App::new)
 }

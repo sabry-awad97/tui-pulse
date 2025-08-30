@@ -1,7 +1,12 @@
 use crate::terminal::{restore_terminal, setup_terminal};
 use crossterm::event;
 use pulse_core::{
-    Component, IntoElement, exit::should_exit, frame_ext::set_current_event, hooks::HookContext,
+    Component, IntoElement,
+    exit::should_exit,
+    hooks::{
+        HookContext,
+        event::{global_events::process_global_event, set_current_event},
+    },
 };
 use std::{rc::Rc, time::Duration};
 
@@ -47,6 +52,9 @@ where
     // Create the element instance and convert it
     let element = initializer().into_element();
 
+    // Call on_mount for the root component
+    element.on_mount();
+
     // Main render loop
     let mut running = true;
     while running {
@@ -56,14 +64,20 @@ where
         // Handle events with a small timeout to prevent blocking
         if event::poll(Duration::from_millis(16))? {
             if let Ok(event) = event::read() {
-                // Update the current event in FrameExt
+                // Update the current event for hooks
                 unsafe {
                     set_current_event(Some(&event));
                 }
 
-                // Check for quit condition
-                if should_exit() {
-                    running = false;
+                // Process events
+                if let event::Event::Key(key_event) = event {
+                    // Process global events first
+                    let processed = process_global_event(&key_event);
+
+                    // If no global handler processed the event and exit is requested, quit
+                    if !processed && should_exit() {
+                        running = false;
+                    }
                 }
             }
         } else {
@@ -164,6 +178,9 @@ where
     // Create the element instance and convert it
     let element = app_fn().await.into_element();
 
+    // Call on_mount for the root component
+    element.on_mount();
+
     // Main render loop
     loop {
         // Reset hook index before each render
@@ -172,23 +189,34 @@ where
         // Get terminal size for rendering
         let size = terminal.size()?;
 
-        // Handle events
-        if event::poll(Duration::from_millis(0))? {
+        // Handle events with a small timeout to prevent blocking
+        if event::poll(Duration::from_millis(16))? {
             if let Ok(event) = event::read() {
-                // Update the current event in FrameExt
+                // Update the current event for hooks
                 unsafe {
                     set_current_event(Some(&event));
                 }
 
-                // Check for quit condition
-                if should_exit() {
-                    break;
+                // Process events
+                if let event::Event::Key(key_event) = event {
+                    // Process global events first
+                    let processed = process_global_event(&key_event);
+
+                    // If no global handler processed the event and exit is requested, quit
+                    if !processed && should_exit() {
+                        break;
+                    }
                 }
             }
         } else {
             // No events, clear the current event
             unsafe {
                 set_current_event(None);
+            }
+
+            // If no events and exit is requested, quit
+            if should_exit() {
+                break;
             }
         }
 
