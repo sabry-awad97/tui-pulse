@@ -8,4 +8,4 @@ pulse_core = { workspace = true }
 pulse_core_macros = { workspace = true }
 crossterm = { workspace = true }
 ratatui = { workspace = true }
-tokio = { version = "1.0", features = ["full"] }
+tokio = { workspace = true, features = ["full"] }
