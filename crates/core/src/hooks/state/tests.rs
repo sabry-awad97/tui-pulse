@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 fn test_use_state_thread_safety() {
     with_test_isolate(|| {
         with_hook_context(|_context| {
-            let (state_handle, setter) = use_state(0i32);
+            let (state_handle, setter) = use_state(|| 0i32);
             assert_eq!(state_handle.get(), 0);
 
             // Clone the setter for use in multiple threads
@@ -79,7 +79,7 @@ fn test_use_state_thread_safety() {
 fn test_use_state_performance() {
     with_test_isolate(|| {
         with_component_id("PerformanceTestComponent", |_context| {
-            let (state_handle, setter) = use_state(0u64);
+            let (state_handle, setter) = use_state(|| 0u64);
             assert_eq!(state_handle.get(), 0);
 
             let start = Instant::now();
@@ -111,7 +111,7 @@ fn test_use_state_performance() {
 fn test_use_state_concurrent_reads() {
     with_test_isolate(|| {
         with_hook_context(|_context| {
-            let (state_handle, setter) = use_state(0i32);
+            let (state_handle, setter) = use_state(|| 0i32);
             assert_eq!(state_handle.get(), 0);
 
             // Get the container for direct access in test
@@ -172,21 +172,21 @@ fn test_use_state_persistence() {
     with_test_isolate(|| {
         with_component_id("PersistenceTestComponent", |_context| {
             // First render cycle
-            let (state_handle1, setter1) = use_state("initial".to_string());
+            let (state_handle1, setter1) = use_state(|| "initial".to_string());
             assert_eq!(state_handle1.get(), "initial");
             setter1.set("updated".to_string());
         });
 
         // Second render cycle (same component ID)
         with_component_id("PersistenceTestComponent", |_context| {
-            let (state_handle2, setter2) = use_state("default".to_string());
+            let (state_handle2, setter2) = use_state(|| "default".to_string());
             assert_eq!(state_handle2.get(), "updated"); // Should persist from previous cycle
             setter2.update(|prev| format!("{}_again", prev));
         });
 
         // Third render cycle (same component ID)
         with_component_id("PersistenceTestComponent", |_context| {
-            let (state_handle3, _) = use_state("default".to_string());
+            let (state_handle3, _) = use_state(|| "default".to_string());
             assert_eq!(state_handle3.get(), "updated_again");
         });
     });
@@ -200,7 +200,7 @@ fn test_use_state_memory_cleanup() {
         with_hook_context(|_context| {
             // Create state with large data
             let large_data = vec![iteration; 1000];
-            let (_, setter) = use_state(large_data.clone());
+            let (_, setter) = use_state(|| large_data.clone());
 
             // Update state multiple times
             for i in 0..10 {
@@ -220,7 +220,7 @@ fn test_use_state_memory_cleanup() {
 fn test_use_state_version_tracking() {
     with_test_isolate(|| {
         with_hook_context(|_context| {
-            let (_, setter) = use_state(0);
+            let (_, setter) = use_state(|| 0);
             let container = setter.container().clone();
 
             let initial_version = container.version();
@@ -263,7 +263,7 @@ fn test_use_state_field_access() {
                 },
             };
 
-            let (state_handle, _) = use_state(initial_state);
+            let (state_handle, _) = use_state(|| initial_state);
 
             // Test field access using StateHandle utility methods
             let count = state_handle.field(|s| s.count);

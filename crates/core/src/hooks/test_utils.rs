@@ -281,7 +281,7 @@ mod tests {
             assert_eq!(*context.current_hook.borrow(), 0);
 
             // Test that hooks work within the context
-            let (state, setter) = use_state(42);
+            let (state, setter) = use_state(|| 42);
             assert_eq!(state.get(), 42);
 
             setter.set(100);
@@ -300,14 +300,14 @@ mod tests {
     fn test_with_hook_context_isolation() {
         // Test that each call to with_hook_context is isolated
         with_hook_context(|_| {
-            let (state, setter) = use_state(10);
+            let (state, setter) = use_state(|| 10);
             setter.set(20);
             assert_eq!(state.get(), 20);
         });
 
         with_hook_context(|_| {
             // Should be a fresh context, not affected by previous call
-            let (state, _) = use_state(10);
+            let (state, _) = use_state(|| 10);
             assert_eq!(state.get(), 10); // Should be initial value, not 20
         });
     }
@@ -318,7 +318,7 @@ mod tests {
         let result = with_component_id("TestComponent", |context| {
             assert_eq!(*context.current_hook.borrow(), 0);
 
-            let (state, setter) = use_state(5);
+            let (state, setter) = use_state(|| 5);
             assert_eq!(state.get(), 5);
             setter.set(15);
 
@@ -332,21 +332,21 @@ mod tests {
     fn test_with_component_id_persistence() {
         // Test that state persists across renders of the same component
         with_component_id("PersistentComponent", |_| {
-            let (state, setter) = use_state(0);
+            let (state, setter) = use_state(|| 0);
             assert_eq!(state.get(), 0);
             setter.set(42);
         });
 
         // Second "render" of the same component - state should persist
         with_component_id("PersistentComponent", |_| {
-            let (state, setter) = use_state(0);
+            let (state, setter) = use_state(|| 0);
             assert_eq!(state.get(), 42); // Should have persisted value
             setter.set(84);
         });
 
         // Third "render" - should have the updated value
         with_component_id("PersistentComponent", |_| {
-            let (state, _) = use_state(0);
+            let (state, _) = use_state(|| 0);
             assert_eq!(state.get(), 84);
         });
     }
@@ -355,8 +355,8 @@ mod tests {
     fn test_with_component_id_hook_counter_reset() {
         // Test that hook counter resets between renders
         with_component_id("CounterResetComponent", |context| {
-            let (state1, _) = use_state(1);
-            let (state2, _) = use_state(2);
+            let (state1, _) = use_state(|| 1);
+            let (state2, _) = use_state(|| 2);
             assert_eq!(state1.get(), 1);
             assert_eq!(state2.get(), 2);
             // Hook counter should be at 2 now
@@ -368,8 +368,8 @@ mod tests {
             // Counter should be reset
             assert_eq!(*context.current_hook.borrow(), 0);
 
-            let (state1, _) = use_state(1);
-            let (state2, _) = use_state(2);
+            let (state1, _) = use_state(|| 1);
+            let (state2, _) = use_state(|| 2);
             // Values should persist from previous render
             assert_eq!(state1.get(), 1);
             assert_eq!(state2.get(), 2);
@@ -380,25 +380,25 @@ mod tests {
     fn test_with_component_id_different_components() {
         // Test that different component IDs have separate contexts
         with_component_id("ComponentA", |_| {
-            let (state, setter) = use_state(100);
+            let (state, setter) = use_state(|| 100);
             setter.set(200);
             assert_eq!(state.get(), 200);
         });
 
         with_component_id("ComponentB", |_| {
-            let (state, setter) = use_state(300);
+            let (state, setter) = use_state(|| 300);
             setter.set(400);
             assert_eq!(state.get(), 400);
         });
 
         // Verify they maintain separate state
         with_component_id("ComponentA", |_| {
-            let (state, _) = use_state(100);
+            let (state, _) = use_state(|| 100);
             assert_eq!(state.get(), 200); // Should have ComponentA's value
         });
 
         with_component_id("ComponentB", |_| {
-            let (state, _) = use_state(300);
+            let (state, _) = use_state(|| 300);
             assert_eq!(state.get(), 400); // Should have ComponentB's value
         });
     }
@@ -407,18 +407,18 @@ mod tests {
     fn test_cleanup_component_contexts() {
         // Set up some component contexts
         with_component_id("CleanupTest1", |_| {
-            let (_, setter) = use_state(1);
+            let (_, setter) = use_state(|| 1);
             setter.set(10);
         });
 
         with_component_id("CleanupTest2", |_| {
-            let (_, setter) = use_state(2);
+            let (_, setter) = use_state(|| 2);
             setter.set(20);
         });
 
         // Verify contexts exist by checking state persistence
         with_component_id("CleanupTest1", |_| {
-            let (state, _) = use_state(1);
+            let (state, _) = use_state(|| 1);
             assert_eq!(state.get(), 10);
         });
 
@@ -427,7 +427,7 @@ mod tests {
 
         // After cleanup, contexts should be fresh
         with_component_id("CleanupTest1", |_| {
-            let (state, _) = use_state(1);
+            let (state, _) = use_state(|| 1);
             assert_eq!(state.get(), 1); // Should be initial value again
         });
     }
@@ -436,13 +436,13 @@ mod tests {
     fn test_with_test_isolate_cleanup() {
         // Set up some state outside of test isolate
         with_component_id("IsolateTest", |_| {
-            let (_, setter) = use_state(50);
+            let (_, setter) = use_state(|| 50);
             setter.set(60);
         });
 
         // Verify state exists
         with_component_id("IsolateTest", |_| {
-            let (state, _) = use_state(50);
+            let (state, _) = use_state(|| 50);
             assert_eq!(state.get(), 60);
         });
 
@@ -450,7 +450,7 @@ mod tests {
         let result = with_test_isolate(|| {
             // Inside isolation, should have clean state
             with_component_id("IsolateTest", |_| {
-                let (state, setter) = use_state(50);
+                let (state, setter) = use_state(|| 50);
                 assert_eq!(state.get(), 50); // Should be initial value
                 setter.set(70);
             });
@@ -462,7 +462,7 @@ mod tests {
 
         // After isolation, state should be cleaned up
         with_component_id("IsolateTest", |_| {
-            let (state, _) = use_state(50);
+            let (state, _) = use_state(|| 50);
             assert_eq!(state.get(), 50); // Should be initial value again
         });
     }
@@ -471,7 +471,7 @@ mod tests {
     fn test_with_test_isolate_panic_cleanup() {
         // Set up some state
         with_component_id("PanicTest", |_| {
-            let (_, setter) = use_state(80);
+            let (_, setter) = use_state(|| 80);
             setter.set(90);
         });
 
@@ -479,7 +479,7 @@ mod tests {
         let panic_result = std::panic::catch_unwind(|| {
             with_test_isolate(|| {
                 with_component_id("PanicTest", |_| {
-                    let (_, setter) = use_state(80);
+                    let (_, setter) = use_state(|| 80);
                     setter.set(95);
                 });
 
@@ -491,7 +491,7 @@ mod tests {
 
         // Cleanup should still have happened
         with_component_id("PanicTest", |_| {
-            let (state, _) = use_state(80);
+            let (state, _) = use_state(|| 80);
             assert_eq!(state.get(), 80); // Should be initial value
         });
     }
@@ -500,9 +500,9 @@ mod tests {
     fn test_multiple_hooks_in_component() {
         // Test multiple hooks in the same component
         with_component_id("MultiHookComponent", |_| {
-            let (count, set_count) = use_state(0);
-            let (name, set_name) = use_state("initial".to_string());
-            let (flag, set_flag) = use_state(false);
+            let (count, set_count) = use_state(|| 0);
+            let (name, set_name) = use_state(|| "initial".to_string());
+            let (flag, set_flag) = use_state(|| false);
 
             assert_eq!(count.get(), 0);
             assert_eq!(name.get(), "initial");
@@ -515,9 +515,9 @@ mod tests {
 
         // Second render - all hooks should maintain their state
         with_component_id("MultiHookComponent", |_| {
-            let (count, _) = use_state(0);
-            let (name, _) = use_state("initial".to_string());
-            let (flag, _) = use_state(false);
+            let (count, _) = use_state(|| 0);
+            let (name, _) = use_state(|| "initial".to_string());
+            let (flag, _) = use_state(|| false);
 
             assert_eq!(count.get(), 42);
             assert_eq!(name.get(), "updated");
@@ -534,7 +534,7 @@ mod tests {
                 assert_eq!(*context.current_hook.borrow(), 0);
 
                 // Test that hooks work within async context
-                let (state, setter) = use_state(123);
+                let (state, setter) = use_state(|| 123);
                 assert_eq!(state.get(), 123);
 
                 setter.set(456);
@@ -562,7 +562,7 @@ mod tests {
             async move {
                 assert_eq!(*context.current_hook.borrow(), 0);
 
-                let (state, setter) = use_state(777);
+                let (state, setter) = use_state(|| 777);
                 assert_eq!(state.get(), 777);
                 setter.set(888);
 
@@ -579,7 +579,7 @@ mod tests {
         // Test state persistence in async context
         with_async_component_id("AsyncComponent", |_| {
             async move {
-                let (state, _) = use_state(777);
+                let (state, _) = use_state(|| 777);
                 assert_eq!(state.get(), 888); // Should have persisted value
             }
         })
@@ -590,14 +590,14 @@ mod tests {
     async fn test_with_async_test_isolate() {
         // Set up some state
         with_component_id("AsyncIsolateTest", |_| {
-            let (_, setter) = use_state(999);
+            let (_, setter) = use_state(|| 999);
             setter.set(1000);
         });
 
         let result = with_async_test_isolate(|| async {
             // Should have clean state in isolation
             with_component_id("AsyncIsolateTest", |_| {
-                let (state, setter) = use_state(999);
+                let (state, setter) = use_state(|| 999);
                 assert_eq!(state.get(), 999);
                 setter.set(1001);
             });
@@ -613,7 +613,7 @@ mod tests {
 
         // State should be cleaned up after isolation
         with_component_id("AsyncIsolateTest", |_| {
-            let (state, _) = use_state(999);
+            let (state, _) = use_state(|| 999);
             assert_eq!(state.get(), 999);
         });
     }

@@ -15,10 +15,13 @@ pub struct StateContainer<T> {
 }
 
 impl<T> StateContainer<T> {
-    /// Create a new state container with an initial value
-    pub fn new(initial_value: T) -> Self {
+    /// Create a new state container with the initial value from the initializer
+    pub fn new<F>(initializer: F) -> Self
+    where
+        F: FnOnce() -> T,
+    {
         Self {
-            value: RwLock::new(initial_value),
+            value: RwLock::new(initializer()),
             version: Mutex::new(0),
         }
     }
@@ -85,10 +88,14 @@ pub struct StateHandle<T> {
 }
 
 impl<T> StateHandle<T> {
-    /// Create a new state handle with an initial value
-    pub fn new(initial_value: T) -> Self {
+    /// Create a new state handle with an initial value from an initializer function
+    /// This allows for lazy initialization of the state value
+    pub fn new<F>(initializer: F) -> Self
+    where
+        F: FnOnce() -> T,
+    {
         Self {
-            container: Arc::new(StateContainer::new(initial_value)),
+            container: Arc::new(StateContainer::new(initializer)),
         }
     }
 
@@ -206,7 +213,7 @@ where
     /// // In a component context:
     /// # let context = Rc::new(HookContext::new());
     /// # set_hook_context(context);
-    /// let (state, _) = use_state(AppState { count: 42, name: "test".to_string() });
+    /// let (state, _) = use_state(|| AppState { count: 42, name: "test".to_string() });
     /// let count = state.field(|s| s.count);
     /// // count is now 42
     /// ```
@@ -230,7 +237,7 @@ where
     /// // In a component context:
     /// # let context = Rc::new(HookContext::new());
     /// # set_hook_context(context);
-    /// let (count, _) = use_state(42);
+    /// let (count, _) = use_state(|| 42);
     /// let is_even = count.map(|c| c % 2 == 0);
     /// // is_even is now true
     /// ```
@@ -262,7 +269,7 @@ where
 /// // In a component context:
 /// # let context = Rc::new(HookContext::new());
 /// # set_hook_context(context);
-/// let (count_handle, set_count) = use_state(0);
+/// let (count_handle, set_count) = use_state(|| 0);
 /// let count = count_handle.get();
 /// // count is now 0
 ///
@@ -280,7 +287,7 @@ where
 /// // In a component context:
 /// # let context = Rc::new(HookContext::new());
 /// # set_hook_context(context);
-/// let (count_handle, set_count) = use_state(0);
+/// let (count_handle, set_count) = use_state(|| 0);
 /// let count = count_handle.get();
 /// // count is now 0
 ///
@@ -303,7 +310,7 @@ where
 /// // In a component context:
 /// # let context = Rc::new(HookContext::new());
 /// # set_hook_context(context);
-/// let (state_handle, set_state) = use_state(AppState {
+/// let (state_handle, set_state) = use_state(|| AppState {
 ///     count: 0,
 ///     name: "Hello".to_string(),
 /// });
@@ -332,7 +339,7 @@ where
 /// // In a component context:
 /// # let context = Rc::new(HookContext::new());
 /// # set_hook_context(context);
-/// let (count_handle, set_count) = use_state(0);
+/// let (count_handle, set_count) = use_state(|| 0);
 /// let count = count_handle.get();
 /// // count is now 0
 ///
@@ -356,7 +363,11 @@ where
 /// - State updates are batched and don't cause immediate re-renders
 /// - Version tracking enables efficient change detection
 /// - Memory usage is minimal with Arc-based sharing
-pub fn use_state<T: Clone + 'static>(initial_value: T) -> (StateHandle<T>, StateSetter<T>) {
+pub fn use_state<T, F>(initializer: F) -> (StateHandle<T>, StateSetter<T>)
+where
+    T: Clone + 'static,
+    F: FnOnce() -> T,
+{
     use crate::hooks::with_hook_context;
 
     with_hook_context(|ctx| {
@@ -364,7 +375,7 @@ pub fn use_state<T: Clone + 'static>(initial_value: T) -> (StateHandle<T>, State
 
         // Get or initialize the state container for this hook
         let container_ref =
-            ctx.get_or_init_state(index, || Arc::new(StateContainer::new(initial_value)));
+            ctx.get_or_init_state(index, || Arc::new(StateContainer::new(initializer)));
 
         // Extract the Arc<StateContainer<T>> from Rc<RefCell<Arc<StateContainer<T>>>>
         let container = container_ref.borrow().clone();
