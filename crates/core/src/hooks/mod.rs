@@ -1,5 +1,10 @@
 use std::{any::Any, cell::RefCell, collections::HashMap, rc::Rc};
 
+pub mod state;
+
+#[cfg(test)]
+pub mod test_utils;
+
 thread_local! {
     static HOOK_CONTEXT: RefCell<Option<Rc<HookContext>>> = const { RefCell::new(None) };
 }
@@ -46,6 +51,33 @@ impl HookContext {
         self.states.borrow_mut().insert(index, Box::new(value));
     }
 
+    /// Get or initialize state for a specific hook index
+    pub fn get_or_init_state<T: 'static, F>(
+        &self,
+        index: usize,
+        init: F,
+    ) -> std::rc::Rc<std::cell::RefCell<T>>
+    where
+        F: FnOnce() -> T,
+    {
+        use std::cell::RefCell;
+        use std::rc::Rc;
+
+        let mut states = self.states.borrow_mut();
+
+        if let Some(existing) = states.get(&index) {
+            // Try to downcast to the expected type
+            if let Some(typed_state) = existing.downcast_ref::<Rc<RefCell<T>>>() {
+                return typed_state.clone();
+            }
+        }
+
+        // Initialize new state
+        let new_state = Rc::new(RefCell::new(init()));
+        states.insert(index, Box::new(new_state.clone()));
+        new_state
+    }
+
     /// Check if state exists for a hook index
     pub fn has_state(&self, index: usize) -> bool {
         self.states.borrow().contains_key(&index)
@@ -83,42 +115,11 @@ pub fn clear_hook_context() {
     });
 }
 
-/// Execute a closure with a hook context
-pub fn with_hook_context<F, R>(context: Rc<HookContext>, f: F) -> R
-where
-    F: FnOnce() -> R,
-{
-    set_hook_context(context.clone());
-    context.reset_hook_index();
-    let result = f();
-    clear_hook_context();
-    result
-}
-
-/// A simple state hook implementation
-pub fn use_state<T: Clone + 'static>(initial_value: T) -> (T, impl Fn(T)) {
-    let context = get_hook_context().expect("use_state must be called within a hook context");
-    let index = context.next_hook_index();
-
-    // Get existing state or initialize with default
-    let current_value = if context.has_state(index) {
-        context
-            .get_state::<T>(index)
-            .unwrap_or(initial_value.clone())
-    } else {
-        context.set_state(index, initial_value.clone());
-        initial_value
-    };
-
-    // Return current value and setter function
-    let setter = {
-        let context = context.clone();
-        move |new_value: T| {
-            context.set_state(index, new_value);
-        }
-    };
-
-    (current_value, setter)
+/// Get the current hook context
+pub fn with_hook_context<R>(f: impl FnOnce(&HookContext) -> R) -> R {
+    let context =
+        get_hook_context().expect("with_hook_context must be called within a hook context");
+    f(&context)
 }
 
 #[cfg(test)]
@@ -213,68 +214,20 @@ mod tests {
     fn test_with_hook_context() {
         let context = Rc::new(HookContext::new());
         context.set_state(0, 100i32);
-        context.next_hook_index(); // Advance to index 1
 
-        let result = with_hook_context(context.clone(), || {
-            // Hook index should be reset
-            let ctx = get_hook_context().unwrap();
-            assert_eq!(ctx.next_hook_index(), 0);
+        // Set up the context first
+        set_hook_context(context.clone());
 
-            // State should still be available
+        let result = with_hook_context(|ctx| {
+            // State should be available
             assert_eq!(ctx.get_state::<i32>(0), Some(100));
-
             "test_result"
         });
 
         assert_eq!(result, "test_result");
-        assert!(get_hook_context().is_none()); // Context cleared after execution
-    }
 
-    #[test]
-    fn test_use_state_hook() {
-        let context = Rc::new(HookContext::new());
-
-        with_hook_context(context.clone(), || {
-            // First call - should return initial value
-            let (value, setter) = use_state(0i32);
-            assert_eq!(value, 0);
-
-            // Update the value
-            setter(42);
-        });
-
-        with_hook_context(context.clone(), || {
-            // Second call - should return updated value
-            let (value, _setter) = use_state(0i32);
-            assert_eq!(value, 42);
-        });
-    }
-
-    #[test]
-    fn test_multiple_use_state_hooks() {
-        let context = Rc::new(HookContext::new());
-
-        with_hook_context(context.clone(), || {
-            // Multiple hooks in same component
-            let (count, set_count) = use_state(0i32);
-            let (name, set_name) = use_state("initial".to_string());
-
-            assert_eq!(count, 0);
-            assert_eq!(name, "initial");
-
-            // Update both
-            set_count(10);
-            set_name("updated".to_string());
-        });
-
-        with_hook_context(context.clone(), || {
-            // Should maintain separate state for each hook
-            let (count, _) = use_state(0i32);
-            let (name, _) = use_state("initial".to_string());
-
-            assert_eq!(count, 10);
-            assert_eq!(name, "updated");
-        });
+        // Clean up
+        clear_hook_context();
     }
 
     #[test]
