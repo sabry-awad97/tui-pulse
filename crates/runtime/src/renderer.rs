@@ -1,6 +1,9 @@
-use crate::terminal::setup_terminal;
-use pulse_core::{Component, IntoElement, hooks::HookContext};
-use std::rc::Rc;
+use crate::terminal::{restore_terminal, setup_terminal};
+use crossterm::event;
+use pulse_core::{
+    Component, IntoElement, exit::should_exit, frame_ext::set_current_event, hooks::HookContext,
+};
+use std::{rc::Rc, time::Duration};
 
 /// Renders a component-based TUI application with hooks support
 ///
@@ -12,7 +15,7 @@ use std::rc::Rc;
 ///
 /// # Example
 /// ```no_run
-/// use pulse_runtime::render_with_hooks;
+/// use pulse_runtime::render;
 /// use pulse_core::{hooks::state::use_state, Component, IntoElement};
 /// use ratatui::{Frame, layout::Rect, text::Text};
 ///
@@ -25,7 +28,7 @@ use std::rc::Rc;
 ///     }
 /// }
 ///
-/// render_with_hooks(|| Counter).unwrap();
+/// render(|| Counter).unwrap();
 /// ```
 pub(crate) fn render_with_hooks<F, T>(initializer: F) -> Result<(), Box<dyn std::error::Error>>
 where
@@ -44,19 +47,43 @@ where
     // Create the element instance and convert it
     let element = initializer().into_element();
 
-    // Reset hook index before each render
-    hook_context.reset_hook_index();
+    // Main render loop
+    let mut running = true;
+    while running {
+        // Reset hook index before each render
+        hook_context.reset_hook_index();
 
-    // Render the component
-    terminal.draw(|frame| {
-        element.render(frame.area(), frame);
-    })?;
+        // Handle events with a small timeout to prevent blocking
+        if event::poll(Duration::from_millis(16))? {
+            if let Ok(event) = event::read() {
+                // Update the current event in FrameExt
+                unsafe {
+                    set_current_event(Some(&event));
+                }
 
-    // Keep the terminal open briefly to see the result
-    std::thread::sleep(std::time::Duration::from_millis(2000));
+                // Check for quit condition
+                if should_exit() {
+                    running = false;
+                }
+            }
+        } else {
+            // No events, clear the current event
+            unsafe {
+                set_current_event(None);
+            }
+        }
+
+        // Render the component
+        terminal.draw(|frame| {
+            element.render(frame.area(), frame);
+        })?;
+    }
 
     // Clean up the hook context
     pulse_core::hooks::clear_hook_context();
+
+    // Restore terminal state
+    restore_terminal()?;
 
     Ok(())
 }
@@ -100,7 +127,7 @@ where
 ///
 /// # Example
 /// ```no_run
-/// use pulse_runtime::render_async_with_hooks;
+/// use pulse_runtime::render_async;
 /// use pulse_core::{hooks::state::use_state, Component, IntoElement};
 /// use ratatui::{Frame, layout::Rect, text::Text};
 ///
@@ -114,14 +141,16 @@ where
 /// }
 ///
 /// # async fn example() {
-/// render_async_with_hooks(|| async { AsyncCounter }).await.unwrap();
+/// render_async(|| async { AsyncCounter }).await.unwrap();
 /// # }
 /// ```
-pub(crate) async fn render_async_with_hooks<F, Fut, T>(app_fn: F) -> Result<(), Box<dyn std::error::Error>>
+pub(crate) async fn render_async_with_hooks<F, Fut, T>(
+    app_fn: F,
+) -> Result<(), Box<dyn std::error::Error>>
 where
     F: Fn() -> Fut,
-    Fut: std::future::Future<Output = T>,
-    T: IntoElement,
+    Fut: std::future::Future<Output = T> + Send + 'static,
+    T: IntoElement + 'static,
 {
     // Initialize terminal backend
     let mut terminal = setup_terminal()?;
@@ -135,22 +164,48 @@ where
     // Create the element instance and convert it
     let element = app_fn().await.into_element();
 
-    // Reset hook index before render
-    hook_context.reset_hook_index();
+    // Main render loop
+    loop {
+        // Reset hook index before each render
+        hook_context.reset_hook_index();
 
-    // Get terminal size for rendering
-    let size = terminal.size()?;
+        // Get terminal size for rendering
+        let size = terminal.size()?;
 
-    // Render the component
-    terminal.draw(|frame| {
-        element.render(size, frame);
-    })?;
+        // Handle events
+        if event::poll(Duration::from_millis(0))? {
+            if let Ok(event) = event::read() {
+                // Update the current event in FrameExt
+                unsafe {
+                    set_current_event(Some(&event));
+                }
 
-    // Keep the terminal open briefly to see the result
-    tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
+                // Check for quit condition
+                if should_exit() {
+                    break;
+                }
+            }
+        } else {
+            // No events, clear the current event
+            unsafe {
+                set_current_event(None);
+            }
+        }
+
+        // Render the component
+        terminal.draw(|frame| {
+            element.render(size, frame);
+        })?;
+
+        // Small delay to prevent high CPU usage
+        tokio::time::sleep(Duration::from_millis(16)).await; // ~60 FPS
+    }
 
     // Clean up the hook context
     pulse_core::hooks::clear_hook_context();
+
+    // Restore terminal state
+    restore_terminal()?;
 
     Ok(())
 }
@@ -181,8 +236,8 @@ where
 pub async fn render_async<F, Fut, T>(app_fn: F) -> Result<(), Box<dyn std::error::Error>>
 where
     F: Fn() -> Fut,
-    Fut: std::future::Future<Output = T>,
-    T: IntoElement,
+    Fut: std::future::Future<Output = T> + Send + 'static,
+    T: IntoElement + 'static,
 {
     render_async_with_hooks(app_fn).await
 }

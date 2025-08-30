@@ -4,11 +4,12 @@
 //! functionality for TUI applications.
 
 use crossterm::{
+    event::EnableMouseCapture,
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{Terminal, backend::CrosstermBackend};
-use std::io::{self, Stdout, stdout};
+use std::io::{self, Stdout};
 
 /// A managed terminal instance that handles setup and cleanup
 pub struct ManagedTerminal {
@@ -25,7 +26,7 @@ impl ManagedTerminal {
         let mut stdout = io::stdout();
 
         // Enter alternate screen to preserve terminal state
-        execute!(stdout, EnterAlternateScreen)?;
+        execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
 
         // Create the terminal backend
         let backend = CrosstermBackend::new(stdout);
@@ -65,7 +66,12 @@ impl Drop for ManagedTerminal {
     fn drop(&mut self) {
         // Restore terminal state
         let _ = disable_raw_mode();
-        let _ = execute!(stdout(), LeaveAlternateScreen);
+        let _ = execute!(
+            self.terminal.backend_mut(),
+            LeaveAlternateScreen,
+            crossterm::event::DisableMouseCapture
+        );
+        let _ = self.terminal.show_cursor();
     }
 }
 
@@ -76,8 +82,20 @@ pub fn setup_terminal() -> io::Result<ManagedTerminal> {
 
 /// Restore terminal to original state
 pub fn restore_terminal() -> io::Result<()> {
-    disable_raw_mode()?;
-    execute!(stdout(), LeaveAlternateScreen)?;
+    // Disable raw mode
+    let _ = disable_raw_mode();
+
+    // Leave alternate screen and disable mouse capture
+    let _ = execute!(
+        std::io::stdout(),
+        LeaveAlternateScreen,
+        crossterm::event::DisableMouseCapture,
+        crossterm::cursor::Show
+    );
+
+    // Ensure cursor is shown
+    let _ = crossterm::execute!(std::io::stdout(), crossterm::cursor::Show);
+
     Ok(())
 }
 

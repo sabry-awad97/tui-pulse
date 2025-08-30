@@ -2,6 +2,7 @@ use ratatui::Frame;
 use ratatui::layout::Rect;
 
 pub trait Component {
+    fn on_mount(&self) {}
     fn render(&self, area: Rect, frame: &mut Frame);
 }
 
