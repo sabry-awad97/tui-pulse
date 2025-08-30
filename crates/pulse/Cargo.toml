@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 pulse_core = { workspace = true }
+pulse_runtime = { workspace = true }
 pulse_core_macros = { workspace = true }
 crossterm = { workspace = true }
 ratatui = { workspace = true }

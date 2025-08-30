@@ -1,11 +1,15 @@
 [package]
 name = "pulse_examples"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [[bin]]
 name = "basic_example"
 path = "basic_example/src/main.rs"
+
+[[bin]]
+name = "counter_app"
+path = "counter_app/src/main.rs"
 
 [dependencies]
 pulse = { workspace = true }

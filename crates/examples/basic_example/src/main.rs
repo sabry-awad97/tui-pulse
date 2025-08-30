@@ -9,7 +9,7 @@
 //! This approach is useful for testing, debugging, or creating simple text-based output
 //! without the complexity of terminal management.
 
-use pulse::ratatui;
+use pulse::prelude::ratatui;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Direction, Layout, Rect},

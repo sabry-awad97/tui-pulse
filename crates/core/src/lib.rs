@@ -1,3 +1,7 @@
 mod component;
-mod hooks;
-pub mod vdom;
+pub use component::Component;
+
+pub mod hooks;
+
+mod vdom;
+pub use vdom::{Element, IntoElement};
