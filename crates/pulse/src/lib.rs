@@ -1,4 +1,7 @@
-pub use pulse_core::{Component, Element, IntoElement};
+pub use pulse_core::{
+    Component, Element, IntoElement,
+    hooks::state::{StateHandle, StateSetter, use_state},
+};
 pub use pulse_runtime::*;
 
 pub mod prelude {

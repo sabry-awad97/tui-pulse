@@ -1,6 +1,6 @@
 mod renderer;
 mod terminal;
-pub use renderer::{render, render_async, render_async_with_hooks, render_with_hooks};
+pub use renderer::{render, render_async};
 pub use terminal::{ManagedTerminal, restore_terminal, setup_terminal};
 
 #[cfg(test)]
@@ -61,28 +61,28 @@ mod tests {
     // Test synchronous rendering with hooks
     #[test]
     fn test_render_with_hooks() {
-        let result = render_with_hooks(|| CounterComponent);
+        let result = render(|| CounterComponent);
         assert!(result.is_ok());
     }
 
     // Test async rendering with hooks
     #[tokio::test]
     async fn test_async_render_with_hooks() {
-        let result = render_async_with_hooks(|| async { CounterComponent }).await;
+        let result = render_async(|| async { CounterComponent }).await;
         assert!(result.is_ok());
     }
 
     // Test component with multiple hooks
     #[test]
     fn test_component_with_multiple_hooks() {
-        let result = render_with_hooks(|| MultiHookComponent);
+        let result = render(|| MultiHookComponent);
         assert!(result.is_ok());
     }
 
     // Test component with effect hook
     #[test]
     fn test_component_with_effect() {
-        let result = render_with_hooks(|| EffectComponent);
+        let result = render(|| EffectComponent);
         assert!(result.is_ok());
     }
 
@@ -90,11 +90,11 @@ mod tests {
     #[test]
     fn test_multiple_renders() {
         // First render
-        let result1 = render_with_hooks(|| CounterComponent);
+        let result1 = render(|| CounterComponent);
         assert!(result1.is_ok());
 
         // Second render should work independently
-        let result2 = render_with_hooks(|| CounterComponent);
+        let result2 = render(|| CounterComponent);
         assert!(result2.is_ok());
     }
 }

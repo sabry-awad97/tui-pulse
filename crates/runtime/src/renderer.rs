@@ -27,7 +27,7 @@ use std::rc::Rc;
 ///
 /// render_with_hooks(|| Counter).unwrap();
 /// ```
-pub fn render_with_hooks<F, T>(initializer: F) -> Result<(), Box<dyn std::error::Error>>
+pub(crate) fn render_with_hooks<F, T>(initializer: F) -> Result<(), Box<dyn std::error::Error>>
 where
     F: Fn() -> T,
     T: IntoElement,
@@ -117,7 +117,7 @@ where
 /// render_async_with_hooks(|| async { AsyncCounter }).await.unwrap();
 /// # }
 /// ```
-pub async fn render_async_with_hooks<F, Fut, T>(app_fn: F) -> Result<(), Box<dyn std::error::Error>>
+pub(crate) async fn render_async_with_hooks<F, Fut, T>(app_fn: F) -> Result<(), Box<dyn std::error::Error>>
 where
     F: Fn() -> Fut,
     Fut: std::future::Future<Output = T>,

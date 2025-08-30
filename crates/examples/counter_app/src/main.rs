@@ -1,46 +1,40 @@
 use pulse::prelude::*;
 use ratatui::{
-    layout::{Alignment, Constraint, Direction, Layout},
+    Frame,
+    layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
 };
-use std::sync::{Arc, Mutex};
+use std::error::Error;
+
+#[derive(Debug, Clone, PartialEq)]
+struct CounterProps {
+    initial_value: i32,
+}
 
 #[derive(Clone)]
 struct Counter {
-    value: Arc<Mutex<i32>>,
+    props: CounterProps,
 }
 
 impl Counter {
-    fn new() -> Self {
+    fn new(initial_value: i32) -> Self {
         Self {
-            value: Arc::new(Mutex::new(0)),
+            props: CounterProps { initial_value },
         }
-    }
-
-    fn increment(&self) {
-        if let Ok(mut val) = self.value.lock() {
-            *val += 1;
-        }
-    }
-
-    fn decrement(&self) {
-        if let Ok(mut val) = self.value.lock() {
-            *val -= 1;
-        }
-    }
-
-    fn get_value(&self) -> i32 {
-        *self.value.lock().unwrap_or_else(|poisoned| {
-            // Handle poisoned mutex by recovering the data
-            poisoned.into_inner()
-        })
     }
 }
 
 impl Component for Counter {
     fn render(&self, area: Rect, frame: &mut Frame) {
+        // Use the state hook to manage the counter value
+        let (count, _set_count) = use_state(|| self.props.initial_value);
+
+        // Handle keyboard events (this is a simplified example - in a real app,
+        // you'd want to handle events in an event loop)
+        // For this example, we'll just show how to use the state
+
         // Create layout
         let chunks = Layout::default()
             .direction(Direction::Vertical)
@@ -53,35 +47,27 @@ impl Component for Counter {
             .split(area);
 
         // Title
-        let title = Paragraph::new("TUI Pulse Counter App")
-            .style(
-                Style::default()
-                    .fg(Color::Cyan)
-                    .add_modifier(Modifier::BOLD),
-            )
-            .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::ALL));
+        let title = Paragraph::new("Counter App with Hooks 🎣")
+            .style(Style::default().add_modifier(Modifier::BOLD))
+            .alignment(Alignment::Center);
         frame.render_widget(title, chunks[0]);
 
         // Counter display
-        let value = self.get_value();
         let counter_text = vec![
+            Line::from(""), // Empty line for spacing
+            Line::from(vec![Span::styled(
+                format!("Count: {}", count.get()),
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            )]),
+            Line::from(""), // Empty line for spacing
             Line::from(vec![
-                Span::raw("Current Value: "),
+                Span::from("Status: "),
                 Span::styled(
-                    format!("{}", value),
-                    Style::default()
-                        .fg(if value >= 0 { Color::Green } else { Color::Red })
-                        .add_modifier(Modifier::BOLD),
-                ),
-            ]),
-            Line::from(""),
-            Line::from(vec![
-                Span::raw("Status: "),
-                Span::styled(
-                    if value == 0 {
+                    if count.get() == 0 {
                         "Zero"
-                    } else if value > 0 {
+                    } else if count.get() > 0 {
                         "Positive"
                     } else {
                         "Negative"
@@ -97,9 +83,10 @@ impl Component for Counter {
         frame.render_widget(counter_widget, chunks[1]);
 
         // Instructions
-        let instructions = Paragraph::new(vec![Line::from(
-            "Press 'q' to quit, '+' to increment, '-' to decrement",
-        )])
+        let instructions = Paragraph::new(vec![
+            Line::from("Press 'q' to quit, '+' to increment, '-' to decrement"),
+            Line::from(format!("Current value: {}", count.get())),
+        ])
         .style(Style::default().fg(Color::Gray))
         .alignment(Alignment::Center)
         .block(Block::default().borders(Borders::ALL).title("Controls"));
@@ -107,15 +94,10 @@ impl Component for Counter {
     }
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let counter = Counter::new();
-
-    // For now, just render once with some demo increments
-    counter.increment();
-    counter.increment();
-    counter.increment();
-    counter.increment();
-    counter.decrement();
-
-    pulse::render(|| counter.clone())
+fn main() -> Result<(), Box<dyn Error>> {
+    // Render the counter app with hooks support
+    pulse::render(|| {
+        // Create a new counter with initial value of 0
+        Counter::new(0)
+    })
 }
