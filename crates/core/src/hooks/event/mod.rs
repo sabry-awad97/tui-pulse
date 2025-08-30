@@ -8,6 +8,7 @@ pub mod global_events;
 
 static CURRENT_EVENT: AtomicPtr<Event> = AtomicPtr::new(ptr::null_mut());
 
+use std::cell::Cell;
 /// A hook that provides access to the current event
 ///
 /// # Returns
@@ -23,7 +24,22 @@ static CURRENT_EVENT: AtomicPtr<Event> = AtomicPtr::new(ptr::null_mut());
 ///     // Handle the event...
 /// }
 /// ```
+use std::thread_local;
+
+thread_local! {
+    // Track if we've already consumed the event in this render cycle
+    static EVENT_CONSUMED: Cell<bool> = const { Cell::new(false) };
+}
+
 pub fn use_event() -> Option<&'static Event> {
+    // If we've already consumed the event in this render cycle, return None
+    if EVENT_CONSUMED.with(|consumed| consumed.get()) {
+        return None;
+    }
+
+    // Mark the event as consumed
+    EVENT_CONSUMED.with(|consumed| consumed.set(true));
+
     // Safety: We're only reading the pointer, not modifying it
     let ptr = CURRENT_EVENT.load(Ordering::Acquire);
     if ptr.is_null() {
@@ -39,6 +55,9 @@ pub fn use_event() -> Option<&'static Event> {
 /// # Safety
 /// The caller must ensure the pointer remains valid until it's no longer needed
 pub unsafe fn set_current_event(event: Option<&Event>) {
+    // Reset the event consumption flag at the start of each render cycle
+    EVENT_CONSUMED.with(|consumed| consumed.set(false));
+
     if let Some(e) = event {
         let ptr = Box::into_raw(Box::new(e.clone()));
         let old_ptr = CURRENT_EVENT.swap(ptr, Ordering::Release);
@@ -62,31 +81,71 @@ pub unsafe fn set_current_event(event: Option<&Event>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
     #[test]
     fn test_use_event() {
-        // Test that we can set and get an event
-        let test_event = Event::Key(crossterm::event::KeyEvent::new(
-            crossterm::event::KeyCode::Char('a'),
-            crossterm::event::KeyModifiers::NONE,
-        ));
-
-        // Set the event
-        unsafe {
-            set_current_event(Some(&test_event));
-        }
-
-        // Get the event back
-        let event = use_event();
-        assert!(event.is_some());
-        assert_eq!(event.unwrap(), &test_event);
-
-        // Clear the event
-        unsafe {
-            set_current_event(None);
-        }
-
-        // Verify it's cleared
+        // Test with no event set
+        unsafe { set_current_event(None) };
         assert!(use_event().is_none());
+    }
+
+    #[test]
+    fn test_event_consumed_once_per_render() {
+        // Set up a test event
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+
+        // First render cycle
+        unsafe { set_current_event(Some(&event)) };
+
+        // First call should return the event
+        assert!(use_event().is_some());
+
+        // Second call in the same render cycle should return None
+        assert!(use_event().is_none());
+
+        // New render cycle
+        let event2 = Event::Key(KeyEvent::new(KeyCode::Char('b'), KeyModifiers::NONE));
+        unsafe { set_current_event(Some(&event2)) };
+
+        // Should be able to get the new event
+        assert!(use_event().is_some());
+    }
+
+    #[test]
+    fn test_multiple_components_consume_same_event() {
+        // Set up a test event
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+
+        // Simulate render cycle start
+        unsafe { set_current_event(Some(&event)) };
+
+        // First component consumes the event
+        let first_consumption = use_event();
+        assert!(first_consumption.is_some());
+
+        // Second component tries to consume the same event
+        let second_consumption = use_event();
+        assert!(
+            second_consumption.is_none(),
+            "Second component should not be able to consume the same event in the same render cycle"
+        );
+    }
+
+    #[test]
+    fn test_event_reset_between_renders() {
+        // First render cycle
+        let event1 = Event::Key(KeyEvent::new(KeyCode::Char('1'), KeyModifiers::NONE));
+        unsafe { set_current_event(Some(&event1)) };
+
+        // Consume in first render
+        assert!(use_event().is_some());
+
+        // Second render cycle with new event
+        let event2 = Event::Key(KeyEvent::new(KeyCode::Char('2'), KeyModifiers::NONE));
+        unsafe { set_current_event(Some(&event2)) };
+
+        // Should be able to consume the new event
+        assert!(use_event().is_some());
     }
 }

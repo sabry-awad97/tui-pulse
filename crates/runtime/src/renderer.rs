@@ -64,19 +64,21 @@ where
         // Handle events with a small timeout to prevent blocking
         if event::poll(Duration::from_millis(16))? {
             if let Ok(event) = event::read() {
-                // Update the current event for hooks
-                unsafe {
-                    set_current_event(Some(&event));
-                }
+                // Process key events
+                if let event::Event::Key(key_event) = &event {
+                    // First try to process as a global event
+                    let processed = process_global_event(key_event);
 
-                // Process events
-                if let event::Event::Key(key_event) = event {
-                    // Process global events first
-                    let processed = process_global_event(&key_event);
+                    // If not processed as a global event, make it available to components
+                    if !processed {
+                        unsafe {
+                            set_current_event(Some(&event));
+                        }
 
-                    // If no global handler processed the event and exit is requested, quit
-                    if !processed && should_exit() {
-                        running = false;
+                        // Check for exit after component event handling
+                        if should_exit() {
+                            running = false;
+                        }
                     }
                 }
             }
@@ -192,19 +194,21 @@ where
         // Handle events with a small timeout to prevent blocking
         if event::poll(Duration::from_millis(16))? {
             if let Ok(event) = event::read() {
-                // Update the current event for hooks
-                unsafe {
-                    set_current_event(Some(&event));
-                }
+                // Process key events
+                if let event::Event::Key(key_event) = &event {
+                    // First try to process as a global event
+                    let processed = process_global_event(key_event);
 
-                // Process events
-                if let event::Event::Key(key_event) = event {
-                    // Process global events first
-                    let processed = process_global_event(&key_event);
+                    // If not processed as a global event, make it available to components
+                    if !processed {
+                        unsafe {
+                            set_current_event(Some(&event));
+                        }
 
-                    // If no global handler processed the event and exit is requested, quit
-                    if !processed && should_exit() {
-                        break;
+                        // Check for exit after component event handling
+                        if should_exit() {
+                            break;
+                        }
                     }
                 }
             }
@@ -213,11 +217,11 @@ where
             unsafe {
                 set_current_event(None);
             }
+        }
 
-            // If no events and exit is requested, quit
-            if should_exit() {
-                break;
-            }
+        // If no events and exit is requested, quit
+        if should_exit() {
+            break;
         }
 
         // Render the component

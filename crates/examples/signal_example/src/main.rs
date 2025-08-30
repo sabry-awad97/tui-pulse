@@ -3,8 +3,7 @@ use pulse::{crossterm::event::KeyEventKind, prelude::*};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style},
-    text::{Line, Span},
+    text::Line,
     widgets::{Block, Borders, Paragraph},
 };
 
@@ -21,34 +20,26 @@ impl Component for CounterDisplay {
         let counter = use_global_signal(&COUNTER);
         let count = counter.get();
 
-        // Create a styled display of the counter
-        let counter_text = vec![
-            Line::from(""),
-            Line::from(vec![Span::styled(
-                format!("Count: {}", count),
-                Style::default()
-                    .fg(Color::Green)
-                    .add_modifier(Modifier::BOLD),
-            )]),
-            Line::from(""),
-            Line::from(vec![
-                Span::from("Status: "),
-                Span::styled(
-                    if count == 0 {
-                        "Zero"
-                    } else if count > 0 {
-                        "Positive"
-                    } else {
-                        "Negative"
-                    },
-                    Style::default().fg(Color::Yellow),
-                ),
-            ]),
-        ];
+        // Handle key events
+        if let Some(CEvent::Key(key)) = use_event()
+            && key.kind == KeyEventKind::Press
+        {
+            match key.code {
+                KeyCode::Char('+') => counter.set(count + 1),
+                KeyCode::Char('-') => counter.set(count - 1),
+                _ => {}
+            }
+        }
 
-        let counter_widget = Paragraph::new(counter_text)
-            .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::ALL).title("Counter"));
+        let counter_widget = Paragraph::new(vec![
+            Line::from(""),
+            Line::from(format!("Counter: {}", count)),
+            Line::from(""),
+            Line::from("Press '+' to increment"),
+            Line::from("Press '-' to decrement"),
+        ])
+        .alignment(Alignment::Center)
+        .block(Block::default().borders(Borders::ALL).title("Counter"));
 
         frame.render_widget(counter_widget, area);
     }
@@ -62,6 +53,15 @@ impl Component for UserGreeting {
         // Use the global user name signal
         let user = use_global_signal(&USER_NAME);
         let name = user.get();
+
+        // Handle key events
+        if let Some(CEvent::Key(key)) = use_event()
+            && key.kind == KeyEventKind::Press
+            && key.code == KeyCode::Char('n')
+        {
+            let new_name = if name == "User" { "Guest" } else { "User" };
+            user.set(new_name.to_string());
+        }
 
         let greeting = Paragraph::new(vec![
             Line::from(""),
@@ -130,19 +130,6 @@ impl Component for App {
             ])
             .split(area);
 
-        // Handle events using the use_event hook
-        if let Some(CEvent::Key(key)) = use_event()
-            && key.kind == KeyEventKind::Press
-            && let KeyCode::Char('n') = key.code
-        {
-            let current = USER_NAME.get();
-            if current == "User" {
-                USER_NAME.set("Guest".to_string());
-            } else {
-                USER_NAME.set("User".to_string());
-            }
-        }
-
         // Render header
         let header = Paragraph::new("Signal Example (Press 'q' to quit)")
             .alignment(Alignment::Center)
@@ -154,20 +141,20 @@ impl Component for App {
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(8), // Counter
-                Constraint::Length(6), // User greeting (increased from 3 to 6 to fit content and borders)
+                Constraint::Length(6), // User greeting
             ])
             .split(layout[1]);
 
-        // Render counter
+        // Render counter (handles its own events)
         CounterDisplay.render(content[0], frame);
 
-        // Render user greeting
+        // Render user greeting (handles its own events)
         UserGreeting.render(content[1], frame);
 
         // Render footer with instructions
         let instructions = vec![
-            Line::from("Press 'n' to toggle between User and Guest"),
-            Line::from("Press 't' to test global event"),
+            Line::from("Counter: '+' to increment, '-' to decrement"),
+            Line::from("Greeting: 'n' to toggle name"),
             Line::from("Press 'q' to quit"),
         ];
         let footer = Paragraph::new(instructions)
