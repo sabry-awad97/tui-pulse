@@ -16,90 +16,51 @@
 //! ## Usage Examples:
 //!
 //! ### Basic Synchronous Interval
-//! ```rust,ignore
+//! ```rust,no_run
 //! use pulse_core::hooks::interval::use_interval;
-//! use pulse::prelude::*;
 //! use std::time::Duration;
 //!
-//! #[derive(Clone)]
-//! struct MyComponent;
-//!
-//! impl Component for MyComponent {
-//!     fn render(&self, area: Rect, frame: &mut Frame) {
-//!         // Execute callback every second
-//!         use_interval(|| {
-//!             println!("This runs every second!");
-//!         }, Duration::from_secs(1));
-//!
-//!         // Render component content
-//!         let paragraph = Paragraph::new("Timer component")
-//!             .block(Block::default().borders(Borders::ALL));
-//!         frame.render_widget(paragraph, area);
-//!     }
-//! }
+//! // Simple interval example
+//! use_interval(|| {
+//!     println!("This runs every second!");
+//! }, Duration::from_secs(1));
 //! ```
 //!
 //! ### Synchronous Interval with State Updates
-//! ```rust,ignore
+//! ```rust,no_run
 //! use pulse_core::hooks::state::use_state;
 //! use pulse_core::hooks::interval::use_interval;
-//! use pulse::prelude::*;
 //! use std::time::Duration;
 //!
-//! #[derive(Clone)]
-//! struct CounterComponent;
-//!
-//! impl Component for CounterComponent {
-//!     fn render(&self, area: Rect, frame: &mut Frame) {
-//!         let (count, set_count) = use_state(|| 0);
-//!
-//!         // Increment counter every 500ms
-//!         use_interval({
-//!             let set_count = set_count.clone();
-//!             move || {
-//!                 set_count.update(|prev| prev + 1);
-//!             }
-//!         }, Duration::from_millis(500));
-//!
-//!         let paragraph = Paragraph::new(format!("Count: {}", count.get()))
-//!             .block(Block::default().borders(Borders::ALL));
-//!         frame.render_widget(paragraph, area);
+//! // Interval with state updates
+//! let (count, set_count) = use_state(|| 0);
+//! use_interval({
+//!     let set_count = set_count.clone();
+//!     move || {
+//!         set_count.update(|prev| prev + 1);
 //!     }
-//! }
+//! }, Duration::from_millis(500));
 //! ```
 //!
 //! ### Asynchronous Interval
-//! ```rust,ignore
+//! ```rust,no_run
 //! use pulse_core::hooks::interval::use_async_interval;
 //! use pulse_core::hooks::state::use_state;
-//! use pulse::prelude::*;
 //! use std::time::Duration;
 //!
-//! #[derive(Clone)]
-//! struct AsyncDataComponent;
-//!
-//! impl Component for AsyncDataComponent {
-//!     fn render(&self, area: Rect, frame: &mut Frame) {
-//!         let (data, set_data) = use_state(|| String::new());
-//!
-//!         // Fetch data asynchronously every 2 seconds
-//!         use_async_interval({
-//!             let set_data = set_data.clone();
-//!             move || {
-//!                 let set_data = set_data.clone();
-//!                 async move {
-//!                     // Simulate async data fetching
-//!                     let new_data = format!("Data updated at: {:?}", std::time::SystemTime::now());
-//!                     set_data.set(new_data);
-//!                 }
-//!             }
-//!         }, Duration::from_secs(2));
-//!
-//!         let paragraph = Paragraph::new(format!("Current data: {}", data.get()))
-//!             .block(Block::default().borders(Borders::ALL));
-//!         frame.render_widget(paragraph, area);
+//! // Async interval example
+//! let (data, set_data) = use_state(|| String::new());
+//! use_async_interval({
+//!     let set_data = set_data.clone();
+//!     move || {
+//!         let set_data = set_data.clone();
+//!         async move {
+//!             // Simulate async data fetching
+//!             let new_data = format!("Data updated at: {:?}", std::time::SystemTime::now());
+//!             set_data.set(new_data);
+//!         }
 //!     }
-//! }
+//! }, Duration::from_secs(2));
 //! ```
 
 use std::time::Duration;
@@ -249,36 +210,24 @@ where
 /// it will panic. Use `use_interval` for synchronous callbacks that don't require tokio.
 ///
 /// ## Example:
-/// ```rust,ignore
+/// ```rust,no_run
 /// use pulse_core::hooks::interval::use_async_interval;
 /// use pulse_core::hooks::state::use_state;
-/// use pulse::prelude::*;
 /// use std::time::Duration;
 ///
-/// #[derive(Clone)]
-/// struct DataFetcher;
-///
-/// impl Component for DataFetcher {
-///     fn render(&self, area: Rect, frame: &mut Frame) {
-///         let (data, set_data) = use_state(|| String::new());
-///
-///         use_async_interval({
-///             let set_data = set_data.clone();
-///             move || {
-///                 let set_data = set_data.clone();
-///                 async move {
-///                     // Simulate async API call
-///                     let response = "API data".to_string();
-///                     set_data.set(response);
-///                 }
-///             }
-///         }, Duration::from_secs(5));
-///
-///         let paragraph = Paragraph::new(format!("Data: {}", data.get()))
-///             .block(Block::default().borders(Borders::ALL));
-///         frame.render_widget(paragraph, area);
+/// // Async interval example
+/// let (data, set_data) = use_state(|| String::new());
+/// use_async_interval({
+///     let set_data = set_data.clone();
+///     move || {
+///         let set_data = set_data.clone();
+///         async move {
+///             // Simulate async API call
+///             let response = "API data".to_string();
+///             set_data.set(response);
+///         }
 ///     }
-/// }
+/// }, Duration::from_secs(5));
 /// ```
 pub fn use_async_interval<F, Fut>(callback: F, duration: Duration)
 where

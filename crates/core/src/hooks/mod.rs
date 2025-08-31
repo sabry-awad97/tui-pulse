@@ -2,9 +2,10 @@ use std::{any::Any, cell::RefCell, collections::HashMap, rc::Rc};
 
 pub mod effect;
 pub mod event;
+pub mod future;
+pub mod interval;
 pub mod signal;
 pub mod state;
-pub mod interval;
 
 #[cfg(test)]
 pub mod test_utils;
