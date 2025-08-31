@@ -160,9 +160,26 @@ impl<T> StateSetter<T> {
         F: FnOnce(&T) -> T,
         T: Clone,
     {
+        use crate::panic_handler::catch_panic;
+
+        // Wrap the updater function with panic handling
+        let safe_updater = |current: &T| -> T {
+            match catch_panic(std::panic::AssertUnwindSafe(|| updater(current))) {
+                Ok(new_value) => new_value,
+                Err(panic_payload) => {
+                    tracing::error!(
+                        target: "hooks::state",
+                        "State updater function panicked: {:?}",
+                        panic_payload.downcast_ref::<&str>().unwrap_or(&"<unknown panic>")
+                    );
+                    // Return the current value unchanged if updater panics
+                    current.clone()
+                }
+            }
+        };
+
         // Delegate to the container's atomic update method
-        // No double clone - the container's update method handles cloning efficiently
-        self.container.update(updater);
+        self.container.update(safe_updater);
     }
 
     /// Get access to the underlying container (for testing and advanced use cases)
@@ -365,7 +382,7 @@ where
 /// - Memory usage is minimal with Arc-based sharing
 pub fn use_state<T, F>(initializer: F) -> (StateHandle<T>, StateSetter<T>)
 where
-    T: Clone + 'static,
+    T: 'static,
     F: FnOnce() -> T,
 {
     use crate::hooks::with_hook_context;

@@ -42,6 +42,9 @@ where
     F: Fn() -> T,
     T: IntoElement,
 {
+    // Initialize panic handler
+    pulse_core::panic_handler::setup_panic_handler();
+
     // Initialize terminal backend
     let mut terminal = setup_terminal()?;
 
@@ -171,6 +174,9 @@ where
     Fut: std::future::Future<Output = T> + Send + 'static,
     T: IntoElement + 'static,
 {
+    // Initialize panic handler
+    pulse_core::panic_handler::setup_panic_handler();
+
     // Initialize terminal backend
     let mut terminal = setup_terminal()?;
 

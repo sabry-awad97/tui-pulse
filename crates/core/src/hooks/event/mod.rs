@@ -201,5 +201,18 @@ pub fn mark_event_processed(component_id: usize) {
 /// * `Option<Event>` - The current event if available and not yet processed by this hook,
 ///   or None if no event is available or already processed
 pub fn use_event() -> Option<Event> {
-    get_current_event().map(|e| (*e).clone())
+    use crate::panic_handler::catch_panic;
+
+    match catch_panic(|| get_current_event().map(|e| (*e).clone())) {
+        Ok(event) => event,
+        Err(panic_payload) => {
+            tracing::error!(
+                target: "hooks::event",
+                "Event processing panicked: {:?}",
+                panic_payload.downcast_ref::<&str>().unwrap_or(&"<unknown panic>")
+            );
+            // Return None if event processing panics
+            None
+        }
+    }
 }
