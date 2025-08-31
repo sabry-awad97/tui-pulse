@@ -4,6 +4,7 @@ pub mod effect;
 pub mod event;
 pub mod signal;
 pub mod state;
+pub mod interval;
 
 #[cfg(test)]
 pub mod test_utils;
