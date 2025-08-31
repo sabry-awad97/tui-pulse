@@ -35,6 +35,10 @@ path = "future_showcase/src/main.rs"
 name = "todolist_reducer"
 path = "todolist_reducer/src/main.rs"
 
+[[bin]]
+name = "idle_showcase"
+path = "idle_showcase/src/main.rs"
+
 [dependencies]
 pulse = { workspace = true }
 tracing = { workspace = true }

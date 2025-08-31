@@ -3,6 +3,7 @@ use std::{any::Any, cell::RefCell, collections::HashMap, rc::Rc};
 pub mod effect;
 pub mod event;
 pub mod future;
+pub mod idle;
 pub mod interval;
 pub mod reducer;
 pub mod signal;
