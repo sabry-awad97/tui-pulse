@@ -1,5 +1,6 @@
 use std::{any::Any, cell::RefCell, collections::HashMap, rc::Rc};
 
+pub mod effect;
 pub mod event;
 pub mod signal;
 pub mod state;

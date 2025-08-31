@@ -183,7 +183,7 @@ pub fn mark_event_processed(component_id: usize) {
 /// # use pulse_core::hooks::state::use_state;
 /// # use crossterm::event::Event;
 /// // In a component context:
-/// let (key_count, set_key_count) = use_state(0);
+/// let (key_count, set_key_count) = use_state(|| 0);
 /// if let Some(Event::Key(_)) = use_event() {
 ///     set_key_count.update(|prev| prev + 1);
 /// }

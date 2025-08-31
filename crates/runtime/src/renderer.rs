@@ -25,6 +25,7 @@ use std::{rc::Rc, time::Duration};
 /// use pulse_core::{hooks::state::use_state, Component, IntoElement};
 /// use ratatui::{Frame, layout::Rect, text::Text};
 ///
+/// #[derive(Clone)]
 /// struct Counter;
 ///
 /// impl Component for Counter {
@@ -117,6 +118,7 @@ where
 /// use pulse_core::{Component, IntoElement};
 /// use ratatui::{Frame, layout::Rect};
 ///
+/// #[derive(Clone)] // This is required for the component to be cloneable
 /// struct MyComponent;
 ///
 /// impl Component for MyComponent {
@@ -147,6 +149,7 @@ where
 /// use pulse_core::{hooks::state::use_state, Component, IntoElement};
 /// use ratatui::{Frame, layout::Rect, text::Text};
 ///
+/// #[derive(Clone)]
 /// struct AsyncCounter;
 ///
 /// impl Component for AsyncCounter {
@@ -254,6 +257,7 @@ where
 /// use pulse_core::{Component, IntoElement};
 /// use ratatui::{Frame, layout::Rect};
 ///
+/// #[derive(Clone)]
 /// struct MyComponent;
 ///
 /// impl Component for MyComponent {
