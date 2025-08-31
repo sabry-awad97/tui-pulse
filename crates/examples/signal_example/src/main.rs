@@ -1,169 +1,94 @@
-use crossterm::event::{Event as CEvent, KeyCode};
-use pulse::{crossterm::event::KeyEventKind, prelude::*};
-use ratatui::{
-    Frame,
-    layout::{Alignment, Constraint, Direction, Layout, Rect},
-    text::Line,
-    widgets::{Block, Borders, Paragraph},
-};
+use pulse::prelude::*;
 
-// Define global signals
-static COUNTER: GlobalSignal<i32> = Signal::global(|| 0);
-static USER_NAME: GlobalSignal<String> = Signal::global(|| String::from("Guest"));
+mod components;
+mod signals;
 
-// A component that displays the counter value
-struct CounterDisplay;
+use chrono::Local;
+use std::fs;
+use tracing::{debug, error, info, trace};
+use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
-impl Component for CounterDisplay {
-    fn render(&self, area: Rect, frame: &mut Frame) {
-        // Use the global counter signal
-        let counter = use_global_signal(&COUNTER);
-        let count = counter.get();
+fn init_logging() -> Result<(), Box<dyn std::error::Error>> {
+    // Create logs directory if it doesn't exist
+    let log_dir = "logs";
+    fs::create_dir_all(log_dir)?;
 
-        // Handle key events
-        if let Some(CEvent::Key(key)) = use_event()
-            && key.kind == KeyEventKind::Press
-        {
-            match key.code {
-                KeyCode::Char('+') => counter.set(count + 1),
-                KeyCode::Char('-') => counter.set(count - 1),
-                _ => {}
-            }
-        }
+    // Set the default log level if RUST_LOG is not set
+    let env_filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new("info,signal_example=debug"));
 
-        let counter_widget = Paragraph::new(vec![
-            Line::from(""),
-            Line::from(format!("Counter: {}", count)),
-            Line::from(""),
-            Line::from("Press '+' to increment"),
-            Line::from("Press '-' to decrement"),
-        ])
-        .alignment(Alignment::Center)
-        .block(Block::default().borders(Borders::ALL).title("Counter"));
+    // Format logs with timestamp and thread info
+    let format = fmt::format()
+        .with_target(true)
+        .with_level(true)
+        .with_thread_ids(true)
+        .with_thread_names(true)
+        .with_ansi(true)
+        .with_timer(fmt::time::ChronoLocal::new(
+            "%Y-%m-%d %H:%M:%S%.3f".to_string(),
+        ));
 
-        frame.render_widget(counter_widget, area);
-    }
-}
+    // Clone the format for the second layer
+    let file_format = format.clone();
 
-// A component that displays the user name
-struct UserGreeting;
+    // Initialize the global subscriber with only file output
+    tracing_subscriber::registry()
+        .with(env_filter)
+        .with(
+            fmt::layer()
+                .with_ansi(false)
+                .event_format(file_format)
+                .with_writer(std::fs::OpenOptions::new().create(true).append(true).open(
+                    format!(
+                        "logs/signal_example_{}.log",
+                        Local::now().format("%Y%m%d_%H%M%S")
+                    ),
+                )?),
+        )
+        .init();
 
-impl Component for UserGreeting {
-    fn render(&self, area: Rect, frame: &mut Frame) {
-        // Use the global user name signal
-        let user = use_global_signal(&USER_NAME);
-        let name = user.get();
+    info!(
+        "Logging initialized. Logs will be written to {}/signal_example_*.log",
+        log_dir
+    );
 
-        // Handle key events
-        if let Some(CEvent::Key(key)) = use_event()
-            && key.kind == KeyEventKind::Press
-            && key.code == KeyCode::Char('n')
-        {
-            let new_name = if name == "User" { "Guest" } else { "User" };
-            user.set(new_name.to_string());
-        }
-
-        let greeting = Paragraph::new(vec![
-            Line::from(""),
-            Line::from(format!("Hello, {}!", name)),
-            Line::from(""),
-            Line::from("Press 'n' to change name"),
-        ])
-        .alignment(Alignment::Center)
-        .block(Block::default().borders(Borders::ALL).title("User"));
-
-        frame.render_widget(greeting, area);
-    }
-}
-
-// The main app component
-struct App;
-
-impl App {
-    fn new() -> Self {
-        // Register a global event handler for the 't' key
-        on_global_event(KeyCode::Char('t'), || {
-            let current = USER_NAME.get();
-            if current == "Test" {
-                USER_NAME.set("Guest".to_string());
-            } else {
-                USER_NAME.set("Test".to_string());
-            }
-            true // Stop event propagation
-        });
-
-        App
-    }
-}
-
-// 实现Component trait于App结构体
-impl Component for App {
-    fn on_mount(&self) {
-        // Set up a global keyboard event handler
-        on_global_event(KeyCode::Char('q'), || {
-            request_exit();
-            false
-        });
-
-        // Set up a global keyboard event handler for the counter
-        on_global_event(KeyCode::Char('+'), || {
-            let counter = COUNTER.get();
-            COUNTER.set(counter + 1);
-            true
-        });
-
-        on_global_event(KeyCode::Char('-'), || {
-            let counter = COUNTER.get();
-            COUNTER.set(counter - 1);
-            true
-        });
-    }
-
-    fn render(&self, area: Rect, frame: &mut Frame) {
-        // Create a vertical layout
-        let layout = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(3), // Header
-                Constraint::Min(3),    // Content
-                Constraint::Length(3), // Footer
-            ])
-            .split(area);
-
-        // Render header
-        let header = Paragraph::new("Signal Example (Press 'q' to quit)")
-            .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::BOTTOM));
-        frame.render_widget(header, layout[0]);
-
-        // Render content
-        let content = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(8), // Counter
-                Constraint::Length(6), // User greeting
-            ])
-            .split(layout[1]);
-
-        // Render counter (handles its own events)
-        CounterDisplay.render(content[0], frame);
-
-        // Render user greeting (handles its own events)
-        UserGreeting.render(content[1], frame);
-
-        // Render footer with instructions
-        let instructions = vec![
-            Line::from("Counter: '+' to increment, '-' to decrement"),
-            Line::from("Greeting: 'n' to toggle name"),
-            Line::from("Press 'q' to quit"),
-        ];
-        let footer = Paragraph::new(instructions)
-            .alignment(Alignment::Center)
-            .block(Block::default().borders(Borders::TOP));
-        frame.render_widget(footer, layout[2]);
-    }
+    Ok(())
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    pulse::render(App::new)
+    // Initialize logging
+    init_logging()?;
+
+    // Log application start with some useful information
+    info!("Starting signal example application");
+    debug!("Debug logging enabled");
+    trace!("Trace logging enabled");
+
+    // Log environment information
+    #[cfg(debug_assertions)]
+    info!("Running in debug mode");
+
+    #[cfg(not(debug_assertions))]
+    info!("Running in release mode");
+
+    // Log current working directory
+    let current_dir = std::env::current_dir()?;
+    info!("Current working directory: {}", current_dir.display());
+
+    // Log environment variables
+    if let Ok(rust_log) = std::env::var("RUST_LOG") {
+        info!("RUST_LOG set to: {}", rust_log);
+    } else {
+        info!("RUST_LOG not set, using default log level");
+    }
+
+    // Create and run the app
+    info!("Initializing application...");
+    if let Err(e) = render(components::App::new) {
+        error!(error = %e, "Application error");
+        return Err(e);
+    }
+
+    info!("Application shutdown complete");
+    Ok(())
 }
