@@ -11,6 +11,7 @@ use ratatui::{
 use crate::signals::{COUNTER, USER_NAME};
 
 // A component that displays the counter value
+#[derive(Clone)]
 pub struct CounterDisplay;
 
 impl Component for CounterDisplay {
@@ -45,6 +46,7 @@ impl Component for CounterDisplay {
 }
 
 // A component that displays the user name
+#[derive(Clone)]
 pub struct UserGreeting;
 
 impl Component for UserGreeting {
@@ -76,6 +78,7 @@ impl Component for UserGreeting {
 }
 
 // The main app component
+#[derive(Clone)]
 pub struct App;
 
 impl App {

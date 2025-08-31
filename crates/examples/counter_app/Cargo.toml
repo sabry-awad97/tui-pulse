@@ -1,7 +1,0 @@
-[package]
-name = "counter_app"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-pulse = { workspace = true }

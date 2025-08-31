@@ -15,6 +15,10 @@ path = "counter_app/src/main.rs"
 name = "signal_example"
 path = "signal_example/src/main.rs"
 
+[[bin]]
+name = "lifecycle_dashboard"
+path = "lifecycle_dashboard/src/main.rs"
+
 [dependencies]
 pulse = { workspace = true }
 tracing = { workspace = true }
