@@ -5,6 +5,18 @@ edition = "2024"
 
 [dependencies]
 pulse = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = [
+    "env-filter",
+    "fmt",
+    "tracing-log",
+    "chrono",
+] }
+time = { workspace = true, features = ["chrono"] }
+chrono = { workspace = true }
+
+[workspace]
+resolver = "2"
 
 [lib]
 path = "src/lib.rs"

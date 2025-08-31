@@ -17,3 +17,12 @@ path = "signal_example/src/main.rs"
 
 [dependencies]
 pulse = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = [
+    "env-filter",
+    "fmt",
+    "tracing-log",
+    "chrono",
+] }
+time = { workspace = true }
+chrono = { workspace = true }

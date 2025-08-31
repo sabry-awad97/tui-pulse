@@ -71,9 +71,7 @@ where
 
                     // If not processed as a global event, make it available to components
                     if !processed {
-                        unsafe {
-                            set_current_event(Some(&event));
-                        }
+                        set_current_event(Some(event.into()));
 
                         // Check for exit after component event handling
                         if should_exit() {
@@ -84,9 +82,7 @@ where
             }
         } else {
             // No events, clear the current event
-            unsafe {
-                set_current_event(None);
-            }
+            set_current_event(None);
         }
 
         // Render the component
@@ -94,6 +90,9 @@ where
             element.render(frame.area(), frame);
         })?;
     }
+
+    // Clear the current event
+    set_current_event(None);
 
     // Clean up the hook context
     pulse_core::hooks::clear_hook_context();
@@ -201,9 +200,7 @@ where
 
                     // If not processed as a global event, make it available to components
                     if !processed {
-                        unsafe {
-                            set_current_event(Some(&event));
-                        }
+                        set_current_event(Some(event.into()));
 
                         // Check for exit after component event handling
                         if should_exit() {
@@ -214,9 +211,7 @@ where
             }
         } else {
             // No events, clear the current event
-            unsafe {
-                set_current_event(None);
-            }
+            set_current_event(None);
         }
 
         // If no events and exit is requested, quit
@@ -232,6 +227,9 @@ where
         // Small delay to prevent high CPU usage
         tokio::time::sleep(Duration::from_millis(16)).await; // ~60 FPS
     }
+
+    // Clear the current event
+    set_current_event(None);
 
     // Clean up the hook context
     pulse_core::hooks::clear_hook_context();

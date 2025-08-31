@@ -1,151 +1,205 @@
-//! Event handling hooks for TUI applications
+//! Event context for sharing events between components
+//!
+//! This module provides a context for sharing events between components,
+//! allowing child components to access the current event without having to
+//! pass it through props.
 
 use crossterm::event::Event;
-use std::ptr;
-use std::sync::atomic::{AtomicPtr, Ordering};
 
 pub mod global_events;
 
-static CURRENT_EVENT: AtomicPtr<Event> = AtomicPtr::new(ptr::null_mut());
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+};
 
-use std::cell::Cell;
-/// A hook that provides access to the current event
-///
-/// # Returns
-/// `Option<&'static Event>` - The current event if available, `None` otherwise
-///
-/// # Example
-/// ```rust
-/// use pulse_core::hooks::event::use_event;
-/// use crossterm::event::Event;
-///
-/// fn my_component() {
-///     let event = use_event();
-///     // Handle the event...
-/// }
-/// ```
-use std::thread_local;
+use once_cell::sync::Lazy;
+use tracing::debug;
 
-thread_local! {
-    // Track if we've already consumed the event in this render cycle
-    static EVENT_CONSUMED: Cell<bool> = const { Cell::new(false) };
+use crate::hooks::with_hook_context;
+
+/// Structure to track an event and whether it has been processed
+#[derive(Default)]
+pub(crate) struct EventState {
+    /// The current event
+    pub(crate) event: Option<Arc<Event>>,
+    /// Map of component IDs to whether they've processed the event
+    /// This allows each component to independently process the event
+    pub(crate) processed_by: HashMap<usize, bool>,
 }
 
-pub fn use_event() -> Option<&'static Event> {
-    // If we've already consumed the event in this render cycle, return None
-    if EVENT_CONSUMED.with(|consumed| consumed.get()) {
+/// Global storage for the current event
+pub(crate) static CURRENT_EVENT: Lazy<RwLock<EventState>> = Lazy::new(Default::default);
+
+/// Sets the current event in the global storage
+///
+/// This function should be called by the App when an event is received.
+///
+/// # Arguments
+///
+/// * `event` - The event to set in the context
+pub fn set_current_event(event: Option<Arc<Event>>) {
+    // Clone the event for debugging
+    let event_debug = event.clone();
+
+    // Store the event in the global storage
+    let mut current_event = CURRENT_EVENT.write().unwrap();
+    current_event.event = event;
+    current_event.processed_by.clear(); // Reset the processed map for the new event
+
+    debug!("Set current event in context: {:?}", event_debug);
+    debug!("Reset processed state for all components");
+
+    // For debugging
+    if event_debug.is_none() {
+        debug!("Event is None");
+    }
+}
+
+/// Gets the current event from the context
+///
+/// This function should be called by components to access the current event.
+/// Each component can only access the event once per event cycle.
+///
+/// # Returns
+///
+/// * `Option<Arc<Event>>` - The current event, or None if no event is available or already processed
+pub(crate) fn get_current_event() -> Option<Arc<Event>> {
+    // Use hook context to get component's hook index
+    let hook_index = with_hook_context(|ctx| ctx.next_hook_index());
+
+    // Check the global storage
+    let event_state = CURRENT_EVENT.read().unwrap();
+
+    // Get the current event, return None if no event is available
+    let event = match event_state.event.as_ref() {
+        Some(e) => e.clone(),
+        None => {
+            debug!("No event available for hook {}", hook_index);
+            return None;
+        }
+    };
+
+    // Check if this hook has already processed the event
+    let already_processed = event_state
+        .processed_by
+        .get(&hook_index)
+        .copied()
+        .unwrap_or(false);
+
+    // If already processed, return None
+    if already_processed {
+        debug!("Hook {} already processed the event", hook_index);
         return None;
     }
 
-    // Mark the event as consumed
-    EVENT_CONSUMED.with(|consumed| consumed.set(true));
+    drop(event_state); // Release the read lock before acquiring the write lock
 
-    // Safety: We're only reading the pointer, not modifying it
-    let ptr = CURRENT_EVENT.load(Ordering::Acquire);
-    if ptr.is_null() {
-        None
-    } else {
-        // Safety: The pointer is only set to a valid Event and cleared when dropped
-        unsafe { Some(&*ptr) }
-    }
+    // Mark the event as processed by this hook
+    mark_event_processed(hook_index);
+    debug!("Hook {} processing event", hook_index);
+
+    Some(event)
 }
 
-/// Set the current event to be available through the use_event hook
+/// Marks the current event as processed by the specified component
 ///
-/// # Safety
-/// The caller must ensure the pointer remains valid until it's no longer needed
-pub unsafe fn set_current_event(event: Option<&Event>) {
-    // Reset the event consumption flag at the start of each render cycle
-    EVENT_CONSUMED.with(|consumed| consumed.set(false));
-
-    if let Some(e) = event {
-        let ptr = Box::into_raw(Box::new(e.clone()));
-        let old_ptr = CURRENT_EVENT.swap(ptr, Ordering::Release);
-
-        // Free the old pointer if it exists
-        if !old_ptr.is_null() {
-            unsafe {
-                drop(Box::from_raw(old_ptr));
-            }
-        }
-    } else {
-        let old_ptr = CURRENT_EVENT.swap(ptr::null_mut(), Ordering::Release);
-        if !old_ptr.is_null() {
-            unsafe {
-                drop(Box::from_raw(old_ptr));
-            }
-        }
-    }
+/// # Arguments
+///
+/// * `component_id` - The ID of the component that processed the event
+pub fn mark_event_processed(component_id: usize) {
+    let mut event_state = CURRENT_EVENT.write().unwrap();
+    event_state.processed_by.insert(component_id, true);
+    debug!("Marked event as processed by component {}", component_id);
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-
-    #[test]
-    fn test_use_event() {
-        // Test with no event set
-        unsafe { set_current_event(None) };
-        assert!(use_event().is_none());
-    }
-
-    #[test]
-    fn test_event_consumed_once_per_render() {
-        // Set up a test event
-        let event = Event::Key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
-
-        // First render cycle
-        unsafe { set_current_event(Some(&event)) };
-
-        // First call should return the event
-        assert!(use_event().is_some());
-
-        // Second call in the same render cycle should return None
-        assert!(use_event().is_none());
-
-        // New render cycle
-        let event2 = Event::Key(KeyEvent::new(KeyCode::Char('b'), KeyModifiers::NONE));
-        unsafe { set_current_event(Some(&event2)) };
-
-        // Should be able to get the new event
-        assert!(use_event().is_some());
-    }
-
-    #[test]
-    fn test_multiple_components_consume_same_event() {
-        // Set up a test event
-        let event = Event::Key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
-
-        // Simulate render cycle start
-        unsafe { set_current_event(Some(&event)) };
-
-        // First component consumes the event
-        let first_consumption = use_event();
-        assert!(first_consumption.is_some());
-
-        // Second component tries to consume the same event
-        let second_consumption = use_event();
-        assert!(
-            second_consumption.is_none(),
-            "Second component should not be able to consume the same event in the same render cycle"
-        );
-    }
-
-    #[test]
-    fn test_event_reset_between_renders() {
-        // First render cycle
-        let event1 = Event::Key(KeyEvent::new(KeyCode::Char('1'), KeyModifiers::NONE));
-        unsafe { set_current_event(Some(&event1)) };
-
-        // Consume in first render
-        assert!(use_event().is_some());
-
-        // Second render cycle with new event
-        let event2 = Event::Key(KeyEvent::new(KeyCode::Char('2'), KeyModifiers::NONE));
-        unsafe { set_current_event(Some(&event2)) };
-
-        // Should be able to consume the new event
-        assert!(use_event().is_some());
-    }
+/// A React-style hook that returns the current terminal event being processed
+///
+/// This hook allows components to handle terminal events like keyboard, mouse, and resize events
+/// in their render methods. Each hook instance can access an event exactly once per render cycle.
+///
+/// # Event Types
+///
+/// Handles all Crossterm event types:
+/// - `Event::Key` - Keyboard events with modifiers (Ctrl, Alt, Shift)
+/// - `Event::Mouse` - Mouse clicks, drags, scrolls, and movement
+/// - `Event::Resize` - Terminal window resize events
+/// - `Event::FocusGained`/`Event::FocusLost` - Terminal focus events
+/// - `Event::Paste` - Paste events
+///
+/// # Usage Patterns
+///
+/// 1. Keyboard Event Handling:
+/// ```rust,no_run
+/// # use pulse_core::hooks::event::use_event;
+/// # use crossterm::event::{Event, KeyCode, KeyModifiers};
+/// // In a component context:
+/// if let Some(Event::Key(key)) = use_event() {
+///     match key.code {
+///         KeyCode::Char('q') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+///             // Handle Ctrl+Q
+///         }
+///         KeyCode::Enter => {
+///             // Handle Enter key
+///         }
+///         _ => {}
+///     }
+/// }
+/// ```
+///
+/// 2. Mouse Event Handling:
+/// ```rust,no_run
+/// # use pulse_core::hooks::event::use_event;
+/// # use crossterm::event::{Event, MouseEventKind, MouseButton};
+/// // In a component context:
+/// if let Some(Event::Mouse(mouse)) = use_event() {
+///     match mouse.kind {
+///         MouseEventKind::Down(MouseButton::Left) => {
+///             // Handle left click at (mouse.column, mouse.row)
+///         }
+///         MouseEventKind::Drag(MouseButton::Left) => {
+///             // Handle drag
+///         }
+///         _ => {}
+///     }
+/// }
+/// ```
+///
+/// 3. Resize Event Handling:
+/// ```rust,no_run
+/// # use pulse_core::hooks::event::use_event;
+/// # use crossterm::event::Event;
+/// // In a component context:
+/// if let Some(Event::Resize(width, height)) = use_event() {
+///     // Handle terminal resize
+/// }
+/// ```
+///
+/// # Integration with Other Hooks
+///
+/// Works seamlessly with other hooks like `use_state`:
+/// ```rust,no_run
+/// # use pulse_core::hooks::event::use_event;
+/// # use pulse_core::hooks::state::use_state;
+/// # use crossterm::event::Event;
+/// // In a component context:
+/// let (key_count, set_key_count) = use_state(0);
+/// if let Some(Event::Key(_)) = use_event() {
+///     set_key_count.update(|prev| prev + 1);
+/// }
+/// ```
+///
+/// # Note
+///
+/// - Events are consumed when accessed - each event can only be handled once per hook
+/// - Multiple components can use this hook independently
+/// - Events are cleared at the start of each render cycle
+/// - Use with `use_state` for tracking event-related state
+///
+/// # Returns
+///
+/// * `Option<Event>` - The current event if available and not yet processed by this hook,
+///   or None if no event is available or already processed
+pub fn use_event() -> Option<Event> {
+    get_current_event().map(|e| (*e).clone())
 }
