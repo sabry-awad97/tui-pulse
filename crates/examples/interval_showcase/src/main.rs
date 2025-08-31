@@ -79,21 +79,16 @@ impl Component for HeaderComponent {
     fn render(&self, area: Rect, frame: &mut Frame) {
         let (animation_frame, set_animation_frame) = use_state(|| 0u8);
 
-        // Animate title every 200ms
-        use_effect_once(move || {
-            let set_animation_frame = set_animation_frame.clone();
-            std::thread::spawn(move || {
-                let rt = tokio::runtime::Runtime::new().unwrap();
-                rt.block_on(async {
-                    let mut interval = tokio::time::interval(Duration::from_millis(200));
-                    loop {
-                        interval.tick().await;
-                        set_animation_frame.update(|frame| (frame + 1) % 8);
-                    }
-                });
-            });
-            move || {}
-        });
+        // Animate title every 200ms using use_interval
+        use_interval(
+            {
+                let set_animation_frame = set_animation_frame.clone();
+                move || {
+                    set_animation_frame.update(|frame| (frame + 1) % 8);
+                }
+            },
+            Duration::from_millis(200),
+        );
 
         let sparkles = ["✨", "⭐", "🌟", "💫", "✨", "⭐", "🌟", "💫"];
         let sparkle = sparkles[animation_frame.get() as usize];
@@ -110,7 +105,7 @@ impl Component for HeaderComponent {
                 Span::styled(sparkle, Style::default().fg(Color::Yellow)),
             ]),
             Line::from(Span::styled(
-                "Beautiful real-time animations powered by use_effect hooks",
+                "Beautiful real-time animations powered by use_interval hooks",
                 Style::default()
                     .fg(Color::Gray)
                     .add_modifier(Modifier::ITALIC),
@@ -138,24 +133,18 @@ impl Component for AnimatedClockComponent {
         let (current_time, set_current_time) = use_state(Local::now);
         let (tick_animation, set_tick_animation) = use_state(|| 0u8);
 
-        // Update time every second
-        use_effect_once(move || {
-            let set_current_time = set_current_time.clone();
-            let set_tick_animation = set_tick_animation.clone();
-
-            std::thread::spawn(move || {
-                let rt = tokio::runtime::Runtime::new().unwrap();
-                rt.block_on(async {
-                    let mut interval = tokio::time::interval(Duration::from_secs(1));
-                    loop {
-                        interval.tick().await;
-                        set_current_time.set(Local::now());
-                        set_tick_animation.update(|tick| (tick + 1) % 4);
-                    }
-                });
-            });
-            move || {}
-        });
+        // Update time every second using use_interval
+        use_interval(
+            {
+                let set_current_time = set_current_time.clone();
+                let set_tick_animation = set_tick_animation.clone();
+                move || {
+                    set_current_time.set(Local::now());
+                    set_tick_animation.update(|tick| (tick + 1) % 4);
+                }
+            },
+            Duration::from_secs(1),
+        );
 
         let tick_chars = ["🕐", "🕑", "🕒", "🕓"];
         let tick_char = tick_chars[tick_animation.get() as usize];
@@ -211,33 +200,26 @@ impl Component for ProgressBarComponent {
         let (progress, set_progress) = use_state(|| 0u16);
         let (direction, set_direction) = use_state(|| 1i8);
 
-        // Animate progress bar every 100ms
-        use_effect_once(move || {
-            let set_progress = set_progress.clone();
-            let set_direction = set_direction.clone();
+        // Animate progress bar every 100ms using use_interval
+        use_interval(
+            {
+                let set_progress = set_progress.clone();
+                let set_direction = set_direction.clone();
+                move || {
+                    set_progress.update(|current| {
+                        let dir = direction.get();
+                        let new_progress = (*current as i16 + dir as i16).clamp(0, 100) as u16;
 
-            std::thread::spawn(move || {
-                let rt = tokio::runtime::Runtime::new().unwrap();
-                rt.block_on(async {
-                    let mut interval = tokio::time::interval(Duration::from_millis(100));
-                    loop {
-                        interval.tick().await;
+                        if new_progress == 0 || new_progress == 100 {
+                            set_direction.update(|d| -d);
+                        }
 
-                        set_progress.update(|current| {
-                            let dir = direction.get();
-                            let new_progress = (*current as i16 + dir as i16).clamp(0, 100) as u16;
-
-                            if new_progress == 0 || new_progress == 100 {
-                                set_direction.update(|d| -d);
-                            }
-
-                            new_progress
-                        });
-                    }
-                });
-            });
-            move || {}
-        });
+                        new_progress
+                    });
+                }
+            },
+            Duration::from_millis(100),
+        );
 
         let progress_value = progress.get();
         let color = match progress_value {
@@ -268,34 +250,25 @@ struct DataStreamComponent;
 impl Component for DataStreamComponent {
     fn render(&self, area: Rect, frame: &mut Frame) {
         let (data_points, set_data_points) = use_state(VecDeque::<u64>::new);
-        let (stream_active, set_stream_active) = use_state(|| true);
 
-        // Generate data every 300ms
-        use_effect_once(move || {
-            let set_data_points = set_data_points.clone();
-
-            std::thread::spawn(move || {
-                let rt = tokio::runtime::Runtime::new().unwrap();
-                rt.block_on(async {
-                    let mut interval = tokio::time::interval(Duration::from_millis(300));
+        // Generate data every 300ms using use_interval
+        use_interval(
+            {
+                let set_data_points = set_data_points.clone();
+                move || {
                     let mut rng = rand::rng();
-
-                    loop {
-                        interval.tick().await;
-
-                        set_data_points.update(|current| {
-                            let mut new_data = current.clone();
-                            new_data.push_back(rng.random_range(20..80));
-                            if new_data.len() > 15 {
-                                new_data.pop_front();
-                            }
-                            new_data
-                        });
-                    }
-                });
-            });
-            move || {}
-        });
+                    set_data_points.update(|current| {
+                        let mut new_data = current.clone();
+                        new_data.push_back(rng.random_range(20..80));
+                        if new_data.len() > 15 {
+                            new_data.pop_front();
+                        }
+                        new_data
+                    });
+                }
+            },
+            Duration::from_millis(300),
+        );
 
         let data: Vec<u64> = data_points.get().iter().cloned().collect();
 
@@ -323,37 +296,30 @@ impl Component for SystemMonitorComponent {
         let (memory_usage, set_memory_usage) = use_state(|| 60u16);
         let (status_icon, set_status_icon) = use_state(|| 0u8);
 
-        // Update system stats every 500ms
-        use_effect_once(move || {
-            let set_cpu_usage = set_cpu_usage.clone();
-            let set_memory_usage = set_memory_usage.clone();
-            let set_status_icon = set_status_icon.clone();
-
-            std::thread::spawn(move || {
-                let rt = tokio::runtime::Runtime::new().unwrap();
-                rt.block_on(async {
-                    let mut interval = tokio::time::interval(Duration::from_millis(500));
+        // Update system stats every 500ms using use_interval
+        use_interval(
+            {
+                let set_cpu_usage = set_cpu_usage.clone();
+                let set_memory_usage = set_memory_usage.clone();
+                let set_status_icon = set_status_icon.clone();
+                move || {
                     let mut rng = rand::rng();
 
-                    loop {
-                        interval.tick().await;
+                    set_cpu_usage.update(|current| {
+                        let change = rng.random_range(-5i16..5);
+                        ((*current as i16 + change).clamp(20, 90)) as u16
+                    });
 
-                        set_cpu_usage.update(|current| {
-                            let change = rng.random_range(-5i16..5);
-                            ((*current as i16 + change).clamp(20, 90)) as u16
-                        });
+                    set_memory_usage.update(|current| {
+                        let change = rng.random_range(-3i16..3);
+                        ((*current as i16 + change).clamp(30, 85)) as u16
+                    });
 
-                        set_memory_usage.update(|current| {
-                            let change = rng.random_range(-3i16..3);
-                            ((*current as i16 + change).clamp(30, 85)) as u16
-                        });
-
-                        set_status_icon.update(|icon| (icon + 1) % 4);
-                    }
-                });
-            });
-            move || {}
-        });
+                    set_status_icon.update(|icon| (icon + 1) % 4);
+                }
+            },
+            Duration::from_millis(500),
+        );
 
         let status_icons = ["🟢", "🟡", "🔴", "🟠"];
         let status_icon_char = status_icons[status_icon.get() as usize];
@@ -417,7 +383,7 @@ impl Component for FooterComponent {
                 Style::default().fg(Color::Gray),
             ),
             Span::styled(
-                "use_effect",
+                "use_interval",
                 Style::default()
                     .fg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),

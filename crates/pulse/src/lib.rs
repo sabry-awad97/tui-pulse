@@ -8,6 +8,7 @@ pub use pulse_core::{
             use_effect, use_effect_always, use_effect_once,
         },
         event::{global_events::on_global_event, use_event},
+        interval::{use_async_interval, use_interval},
         signal::{GlobalSignal, Signal, use_global_signal},
         state::{StateHandle, StateSetter, use_state},
     },
