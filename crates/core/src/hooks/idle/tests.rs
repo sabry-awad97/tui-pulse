@@ -1,7 +1,6 @@
 use crate::hooks::idle::*;
 use crate::hooks::test_utils::{with_hook_context, with_test_isolate};
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent, MouseEventKind};
-use std::time::{Duration, Instant};
 
 /// Test basic idle detection functionality
 #[test]

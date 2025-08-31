@@ -41,7 +41,7 @@ pub fn setup_panic_handler() {
 
         // For file logging, we can still use tracing-appender
         // This part is independent of debug/release panic behavior
-        let log_file_path = "./logs".to_string(); // Example path, could be configurable
+        let log_file_path = "logs".to_string(); // Example path, could be configurable
         let file_appender = tracing_appender::rolling::daily(log_file_path, "application.log");
         let (non_blocking_appender, guard) = tracing_appender::non_blocking(file_appender);
         unsafe {
