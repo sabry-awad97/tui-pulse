@@ -36,8 +36,6 @@ fn clear_log_messages() {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt::init();
-
     pulse::render(|| App)
 }
 

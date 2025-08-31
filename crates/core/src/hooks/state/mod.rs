@@ -167,13 +167,23 @@ impl<T> StateSetter<T> {
             match catch_panic(std::panic::AssertUnwindSafe(|| updater(current))) {
                 Ok(new_value) => new_value,
                 Err(panic_payload) => {
+                    let reason = if let Some(s) = panic_payload.downcast_ref::<&str>() {
+                        (*s).to_string()
+                    } else if let Some(s) = panic_payload.downcast_ref::<String>() {
+                        s.clone()
+                    } else {
+                        "<unknown panic>".to_string()
+                    };
+
+                    // Log it
                     tracing::error!(
                         target: "hooks::state",
                         "State updater function panicked: {:?}",
-                        panic_payload.downcast_ref::<&str>().unwrap_or(&"<unknown panic>")
+                        reason
                     );
-                    // Return the current value unchanged if updater panics
-                    current.clone()
+
+                    // Re-panic to propagate the error
+                    panic!("💥 State updater panicked: {}", reason);
                 }
             }
         };
@@ -375,6 +385,8 @@ where
 /// Always ensure useState is called within a component function.
 ///
 /// # Performance Notes
+///
+/// {{ ... }}
 ///
 /// - State reads are optimized using RwLock for concurrent access
 /// - State updates are batched and don't cause immediate re-renders
