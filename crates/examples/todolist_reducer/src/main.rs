@@ -9,7 +9,7 @@ use ratatui::{
     style::{Color, Modifier, Style},
     symbols::border,
     text::{Line, Span, Text},
-    widgets::{Block, Borders, List, ListItem, Paragraph},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph},
 };
 use uuid::Uuid;
 
@@ -24,10 +24,6 @@ struct App;
 impl Component for App {
     fn on_mount(&self) {
         on_global_event(KeyCode::Char('q'), || {
-            request_exit();
-            false
-        });
-        on_global_event(KeyCode::Esc, || {
             request_exit();
             false
         });
@@ -132,6 +128,23 @@ struct TodoState {
     selected_index: usize,
     input_mode: bool,
     input_text: String,
+    dialog: Option<DialogState>,
+}
+
+#[derive(Clone, Debug)]
+struct DialogState {
+    dialog_type: DialogType,
+    title: String,
+    message: String,
+    todo_id: Option<Uuid>,
+}
+
+#[derive(Clone, Debug)]
+enum DialogType {
+    DeleteConfirmation,
+    ClearCompleted,
+    #[allow(dead_code)]
+    Exit,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -145,13 +158,18 @@ enum Filter {
 enum TodoAction {
     AddTodo(String, Priority),
     ToggleTodo(Uuid),
+    #[allow(dead_code)]
     DeleteTodo(Uuid),
     SetFilter(Filter),
     SelectNext,
     SelectPrevious,
     ToggleInputMode,
     UpdateInput(String),
+    #[allow(dead_code)]
     ClearCompleted,
+    ShowDialog(DialogType, String, String, Option<Uuid>),
+    CloseDialog,
+    ConfirmDialog,
 }
 
 fn todo_reducer(state: TodoState, action: TodoAction) -> TodoState {
@@ -274,6 +292,79 @@ fn todo_reducer(state: TodoState, action: TodoAction) -> TodoState {
                 ..state
             }
         }
+        TodoAction::ShowDialog(dialog_type, title, message, todo_id) => TodoState {
+            dialog: Some(DialogState {
+                dialog_type,
+                title,
+                message,
+                todo_id,
+            }),
+            ..state
+        },
+        TodoAction::CloseDialog => TodoState {
+            dialog: None,
+            ..state
+        },
+        TodoAction::ConfirmDialog => {
+            if let Some(dialog) = &state.dialog {
+                match dialog.dialog_type {
+                    DialogType::DeleteConfirmation => {
+                        if let Some(todo_id) = dialog.todo_id {
+                            let new_todos = state
+                                .todos
+                                .iter()
+                                .filter(|todo| todo.id != todo_id)
+                                .cloned()
+                                .collect::<Vec<_>>();
+
+                            let new_selected = if state.selected_index > 0
+                                && state.selected_index >= new_todos.len()
+                            {
+                                new_todos.len().saturating_sub(1)
+                            } else {
+                                state.selected_index
+                            };
+
+                            TodoState {
+                                todos: new_todos,
+                                selected_index: new_selected,
+                                dialog: None,
+                                ..state
+                            }
+                        } else {
+                            TodoState {
+                                dialog: None,
+                                ..state
+                            }
+                        }
+                    }
+                    DialogType::ClearCompleted => {
+                        let new_todos = state
+                            .todos
+                            .iter()
+                            .filter(|todo| !todo.completed)
+                            .cloned()
+                            .collect();
+
+                        TodoState {
+                            todos: new_todos,
+                            selected_index: 0,
+                            dialog: None,
+                            ..state
+                        }
+                    }
+                    DialogType::Exit => {
+                        // Exit confirmation - this would trigger app exit
+                        TodoState {
+                            dialog: None,
+                            ..state
+                        }
+                    }
+                }
+            } else {
+                state
+            }
+        }
     }
 }
 
@@ -321,6 +412,7 @@ impl Component for TodoListComponent {
             selected_index: 0,
             input_mode: false,
             input_text: String::new(),
+            dialog: None,
         };
 
         let (state, dispatch) = use_reducer(todo_reducer, initial_state);
@@ -344,8 +436,15 @@ impl Component for TodoListComponent {
                 KeyCode::Char('3') if !current_state.input_mode => {
                     dispatch.call(TodoAction::SetFilter(Filter::Completed));
                 }
-                KeyCode::Char('c') if !current_state.input_mode => {
-                    dispatch.call(TodoAction::ClearCompleted);
+                KeyCode::Char('c')
+                    if !current_state.input_mode && current_state.dialog.is_none() =>
+                {
+                    dispatch.call(TodoAction::ShowDialog(
+                        DialogType::ClearCompleted,
+                        "Clear Completed Tasks".to_string(),
+                        "Are you sure you want to clear all completed tasks? This action cannot be undone.".to_string(),
+                        None,
+                    ));
                 }
                 KeyCode::Up if !current_state.input_mode => {
                     dispatch.call(TodoAction::SelectPrevious);
@@ -359,10 +458,15 @@ impl Component for TodoListComponent {
                         dispatch.call(TodoAction::ToggleTodo(todo.id));
                     }
                 }
-                KeyCode::Delete if !current_state.input_mode => {
+                KeyCode::Delete if !current_state.input_mode && current_state.dialog.is_none() => {
                     let filtered_todos = filter_todos(&current_state.todos, &current_state.filter);
                     if let Some(todo) = filtered_todos.get(current_state.selected_index) {
-                        dispatch.call(TodoAction::DeleteTodo(todo.id));
+                        dispatch.call(TodoAction::ShowDialog(
+                            DialogType::DeleteConfirmation,
+                            "Delete Task".to_string(),
+                            format!("Are you sure you want to delete '{}'?", todo.text),
+                            Some(todo.id),
+                        ));
                     }
                 }
                 KeyCode::Enter if current_state.input_mode => {
@@ -384,6 +488,19 @@ impl Component for TodoListComponent {
                     new_text.pop();
                     dispatch.call(TodoAction::UpdateInput(new_text));
                 }
+                // Dialog controls
+                KeyCode::Enter if current_state.dialog.is_some() => {
+                    dispatch.call(TodoAction::ConfirmDialog);
+                }
+                KeyCode::Esc if current_state.dialog.is_some() => {
+                    dispatch.call(TodoAction::CloseDialog);
+                }
+                KeyCode::Char('y') if current_state.dialog.is_some() => {
+                    dispatch.call(TodoAction::ConfirmDialog);
+                }
+                KeyCode::Char('n') if current_state.dialog.is_some() => {
+                    dispatch.call(TodoAction::CloseDialog);
+                }
                 _ => {}
             }
         }
@@ -398,6 +515,11 @@ impl Component for TodoListComponent {
 
         // Sidebar with stats and controls
         self.render_sidebar(&current_state, chunks[1], frame);
+
+        // Render dialog overlay if present
+        if current_state.dialog.is_some() {
+            self.render_dialog(&current_state, area, frame);
+        }
     }
 }
 
@@ -566,6 +688,89 @@ impl TodoListComponent {
         );
 
         frame.render_widget(stats, area);
+    }
+
+    fn render_dialog(&self, state: &TodoState, area: Rect, frame: &mut Frame) {
+        if let Some(dialog) = &state.dialog {
+            // Center the dialog
+            let dialog_width = 60;
+            let dialog_height = 12;
+            let x = (area.width.saturating_sub(dialog_width)) / 2;
+            let y = (area.height.saturating_sub(dialog_height)) / 2;
+
+            let dialog_area = Rect {
+                x: area.x + x,
+                y: area.y + y,
+                width: dialog_width,
+                height: dialog_height,
+            };
+
+            // Clear the area for the dialog overlay
+            frame.render_widget(Clear, dialog_area);
+
+            // Dialog content
+            let dialog_chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Length(3), // Title
+                    Constraint::Min(4),    // Message
+                    Constraint::Length(3), // Buttons
+                ])
+                .split(dialog_area);
+
+            // Title
+            let title_icon = match dialog.dialog_type {
+                DialogType::DeleteConfirmation => "🗑️",
+                DialogType::ClearCompleted => "🧹",
+                DialogType::Exit => "🚪",
+            };
+
+            let title = Paragraph::new(format!("{} {}", title_icon, dialog.title))
+                .style(
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                )
+                .alignment(Alignment::Center);
+
+            // Message
+            let message = Paragraph::new(dialog.message.as_str())
+                .style(Style::default().fg(Color::White))
+                .alignment(Alignment::Center)
+                .wrap(ratatui::widgets::Wrap { trim: true });
+
+            // Buttons with better spacing and styling
+            let buttons_text = Text::from(vec![
+                Line::from(""),
+                Line::from(vec![
+                    Span::styled(
+                        "  [Y] ",
+                        Style::default()
+                            .fg(Color::Green)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled("Yes", Style::default().fg(Color::Green)),
+                    Span::styled(
+                        "    [N] ",
+                        Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled("No", Style::default().fg(Color::Red)),
+                    Span::styled(
+                        "    [ESC] ",
+                        Style::default()
+                            .fg(Color::Gray)
+                            .add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled("Cancel", Style::default().fg(Color::Gray)),
+                ]),
+            ]);
+
+            let buttons = Paragraph::new(buttons_text).alignment(Alignment::Center);
+
+            frame.render_widget(title, dialog_chunks[0]);
+            frame.render_widget(message, dialog_chunks[1]);
+            frame.render_widget(buttons, dialog_chunks[2]);
+        }
     }
 }
 
