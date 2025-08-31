@@ -1,4 +1,4 @@
-mod component;
+pub mod component;
 pub use component::Component;
 
 pub mod exit;

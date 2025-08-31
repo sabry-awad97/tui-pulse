@@ -2,6 +2,7 @@ use crate::terminal::{restore_terminal, setup_terminal};
 use crossterm::event;
 use pulse_core::{
     Component, IntoElement,
+    component::cleanup_unmounted,
     exit::should_exit,
     hooks::{
         HookContext,
@@ -52,9 +53,6 @@ where
     // Create the element instance and convert it
     let element = initializer().into_element();
 
-    // Call on_mount for the root component
-    element.on_mount();
-
     // Main render loop
     let mut running = true;
     while running {
@@ -85,10 +83,13 @@ where
             set_current_event(None);
         }
 
-        // Render the component
+        // Render the component using render_with_mount to ensure on_mount is called
         terminal.draw(|frame| {
-            element.render(frame.area(), frame);
+            element.render_with_mount(frame.area(), frame);
         })?;
+
+        // Clean up unmounted components after render
+        cleanup_unmounted();
     }
 
     // Clear the current event
@@ -179,9 +180,6 @@ where
     // Create the element instance and convert it
     let element = app_fn().await.into_element();
 
-    // Call on_mount for the root component
-    element.on_mount();
-
     // Main render loop
     loop {
         // Reset hook index before each render
@@ -219,10 +217,13 @@ where
             break;
         }
 
-        // Render the component
+        // Render the component using render_with_mount to ensure on_mount is called
         terminal.draw(|frame| {
-            element.render(size, frame);
+            element.render_with_mount(size, frame);
         })?;
+
+        // Clean up unmounted components after render
+        cleanup_unmounted();
 
         // Small delay to prevent high CPU usage
         tokio::time::sleep(Duration::from_millis(16)).await; // ~60 FPS
