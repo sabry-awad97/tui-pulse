@@ -4,6 +4,7 @@ pub mod effect;
 pub mod event;
 pub mod future;
 pub mod interval;
+pub mod reducer;
 pub mod signal;
 pub mod state;
 

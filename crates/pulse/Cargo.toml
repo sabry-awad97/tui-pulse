@@ -10,3 +10,4 @@ pulse_core_macros = { workspace = true }
 crossterm = { workspace = true }
 ratatui = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
+uuid = { workspace = true, features = ["v4"] }

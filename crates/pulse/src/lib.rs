@@ -10,6 +10,7 @@ pub use pulse_core::{
         event::{global_events::on_global_event, use_event},
         future::{FutureError, FutureHandle, FutureState, use_future, use_future_with_progress},
         interval::{use_async_interval, use_interval},
+        reducer::{DispatchFn, ReducerStateHandle, use_reducer},
         signal::{GlobalSignal, Signal, use_global_signal},
         state::{StateHandle, StateSetter, use_state},
     },

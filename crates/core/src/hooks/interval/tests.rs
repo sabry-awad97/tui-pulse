@@ -360,18 +360,19 @@ async fn test_use_async_interval_with_async_work() {
         });
 
         // Wait for executions (accounting for async work time)
-        sleep(Duration::from_millis(50)).await;
+        sleep(Duration::from_millis(70)).await;
 
-        // Should have executed at least 2 times (considering async work overhead)
+        // Should have executed at least 3 times (considering async work overhead)
+        // With 15ms interval + 5ms async work = ~20ms per cycle, 70ms should allow 3+ executions
         let count = counter.load(Ordering::Relaxed);
         assert!(
-            count >= 2,
-            "Expected at least 2 executions with async work, got {}",
+            count >= 3,
+            "Expected at least 3 executions with async work, got {}",
             count
         );
         assert!(
-            count <= 4,
-            "Expected at most 4 executions with async work, got {}",
+            count <= 6,
+            "Expected at most 6 executions with async work, got {}",
             count
         );
     })
