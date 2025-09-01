@@ -3,6 +3,7 @@ pub use pulse_core::{
     Component, Element, IntoElement,
     exit::request_exit,
     hooks::{
+        callback::{Callback, CallbackFactory, use_callback, use_callback_once},
         context::{Context, use_context, use_context_provider, use_context_with_default},
         effect::{
             EffectDependencies, use_async_effect, use_async_effect_always, use_async_effect_once,
