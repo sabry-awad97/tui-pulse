@@ -7,6 +7,7 @@ pub mod future;
 pub mod hover;
 pub mod idle;
 pub mod interval;
+pub mod once;
 pub mod reducer;
 pub mod signal;
 pub mod state;
