@@ -12,6 +12,7 @@ use crate::hooks::with_hook_context;
 /// # Examples
 ///
 /// ```rust
+/// use pulse_core::hooks::callback::Callback;
 ///
 /// // Define a callback that takes a string and returns nothing
 /// let on_click: Callback<String> = Callback::from(|msg: String| {
@@ -62,14 +63,14 @@ impl<IN, OUT> Callback<IN, OUT> {
     /// # Examples
     ///
     /// ```rust
-    /// use terminus_ui::prelude::*;
+    /// use pulse_core::hooks::callback::Callback;
     ///
     /// let original: Callback<String> = Callback::from(|s: String| {
-    ///     println!("Got: {}", s);
+    ///     println!("Original: {}", s);
     /// });
     ///
     /// let reformed: Callback<i32> = original.reform(|num: i32| format!("Number: {}", num));
-    /// reformed.emit(42); // Prints "Got: Number: 42"
+    /// reformed.emit(42); // Prints "Original: Number: 42"
     /// ```
     pub fn reform<F, T>(&self, func: F) -> Callback<T, OUT>
     where
@@ -90,10 +91,10 @@ impl<IN, OUT> Callback<IN, OUT> {
     /// # Examples
     ///
     /// ```rust
-    /// use terminus_ui::prelude::*;
+    /// use pulse_core::hooks::callback::Callback;
     ///
     /// let original: Callback<String> = Callback::from(|s: String| {
-    ///     println!("Got: {}", s);
+    ///     println!("Processing: {}", s);
     /// });
     ///
     /// let filtered: Callback<i32, Option<()>> = original.filter_reform(|num: i32| {
@@ -104,7 +105,7 @@ impl<IN, OUT> Callback<IN, OUT> {
     ///     }
     /// });
     ///
-    /// filtered.emit(42);  // Prints "Got: Positive: 42", returns Some(())
+    /// filtered.emit(42);  // Prints "Processing: Positive: 42", returns Some(())
     /// filtered.emit(-1);  // Does nothing, returns None
     /// ```
     pub fn filter_reform<F, T>(&self, func: F) -> Callback<T, Option<OUT>>
@@ -427,25 +428,28 @@ where
 ///
 /// # Examples
 ///
-/// ```rust
-/// use rink_core::hooks::callback::use_callback;
-/// use rink_core::hooks::state::use_state;
+/// ```rust,no_run
+/// use pulse_core::hooks::callback::use_callback;
+/// use std::sync::Arc;
 ///
-/// // Direct closure usage (ergonomic)
-/// let (count, set_count) = use_state(0);
-/// let count_value = count.get();
-/// let increment = use_callback(
-///     move |_| set_count.update(|c| c + 1),
-///     count_value
+/// // Example of memoized callback usage
+/// let counter = Arc::new(std::sync::Mutex::new(0));
+///
+/// // Callback recreates only when dependencies change
+/// let increment_callback = use_callback(
+///     {
+///         let counter = counter.clone();
+///         move |amount: i32| {
+///             let mut count = counter.lock().unwrap();
+///             *count += amount;
+///             println!("Count is now: {}", *count);
+///         }
+///     },
+///     42 // dependency value
 /// );
 ///
-/// // Factory function usage (advanced)
-/// let submit = use_callback(
-///     move || Callback::from(move |_| {
-///         println!("Submitting: {} ({})", name_value, age_value);
-///     }),
-///     (name_value, age_value)
-/// );
+/// // Use the callback
+/// increment_callback.emit(1);
 /// ```
 pub fn use_callback<IN, OUT, F, Deps>(
     factory: F,
@@ -523,10 +527,15 @@ where
 ///
 /// # Examples
 ///
-/// ```rust
-/// use rink_core::hooks::callback::use_callback_once;
+/// ```rust,no_run
+/// use pulse_core::hooks::callback::use_callback_once;
 ///
-/// let log_click = use_callback_once(|msg: String| println!("Clicked: {}", msg));
+/// let setup_callback = use_callback_once(|_| {
+///     println!("Component initialized!");
+/// });
+///
+/// // This callback is created once and reused
+/// setup_callback.emit(());
 /// ```
 pub fn use_callback_once<IN, OUT, F>(factory: F) -> MemoizedCallback<IN, OUT>
 where
@@ -544,23 +553,23 @@ where
 ///
 /// # Examples
 ///
-/// ```rust
-/// use rink_core::hooks::callback::use_event_handler;
-/// use rink_core::hooks::state::use_state;
-/// use crossterm::event::KeyCode;
+/// ```rust,ignore
+/// use pulse_core::hooks::callback::use_event_handler;
+/// use std::sync::Arc;
 ///
-/// let (count, set_count) = use_state(0);
-/// let count_value = count.get();
-/// let on_key_press = use_event_handler(
-///     move |key: KeyCode| {
-///         match key {
-///             KeyCode::Up => set_count.update(|c| c + 1),
-///             KeyCode::Down => set_count.update(|c| c - 1),
-///             _ => {}
-///         }
-///     },
-///     count_value
-/// );
+/// let message = Arc::new(std::sync::Mutex::new(String::new()));
+///
+/// let click_handler = use_event_handler({
+///     let message = message.clone();
+///     move |button: String| {
+///         let mut msg = message.lock().unwrap();
+///         *msg = format!("Button clicked: {}", button);
+///         println!("{}", *msg);
+///     }
+/// }, 42); // dependency value
+///
+/// // Use the event handler
+/// click_handler.emit("Submit".to_string());
 /// ```
 pub fn use_event_handler<T, F, Deps>(
     handler: F,

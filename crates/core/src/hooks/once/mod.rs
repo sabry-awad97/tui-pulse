@@ -34,29 +34,28 @@ mod tests;
 /// ```rust,no_run
 /// use pulse_core::hooks::once::use_once;
 ///
-/// // Initialize expensive resources once
-/// let config = use_once(|| {
-///     // This expensive operation only happens once
-///     load_configuration_from_file()
-/// });
-///
-/// if let Some(cfg) = config {
-///     // Use the configuration
-/// }
-///
 /// fn load_configuration_from_file() -> String {
 ///     "config data".to_string()
 /// }
+///
+/// // Initialize expensive resources once
+/// let config = use_once(|| {
+///     // This expensive operation only happens once
+///     load_configuration_from_file();
+/// });
+///
+/// // Use the configuration
+/// println!("Config: {:?}", config);
 /// ```
 ///
 /// ## Logging and Analytics
 /// ```rust,no_run
 /// use pulse_core::hooks::once::use_once;
 ///
-/// // Log component mount only once
+/// // Setup logging and analytics once per component lifecycle
 /// use_once(|| {
-///     log::info!("UserProfile component mounted");
-///     analytics::track_event("component_mounted", "UserProfile");
+///     println!("UserProfile component mounted");
+///     // analytics::track_event("component_mounted", "UserProfile");
 /// });
 /// ```
 pub fn use_once<F>(init_fn: F)

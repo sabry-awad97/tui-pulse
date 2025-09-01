@@ -1,5 +1,6 @@
 use std::{any::Any, cell::RefCell, collections::HashMap, rc::Rc};
 
+pub mod battery;
 pub mod callback;
 pub mod context;
 pub mod effect;
