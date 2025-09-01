@@ -26,8 +26,14 @@ use crate::{
 /// ## Basic Usage
 /// ```rust,no_run
 /// # use pulse_core::hooks::hover::use_hover;
-/// # use pulse_core::prelude::*;
-/// let button = ratatui::widgets::Paragraph::new("Click me!");
+/// # use pulse_core::{Component, IntoElement};
+/// # use ratatui::{Frame, layout::Rect};
+/// #[derive(Clone)]
+/// struct MyButton;
+/// impl Component for MyButton {
+///     fn render(&self, _area: Rect, _frame: &mut Frame) {}
+/// }
+/// let button = MyButton;
 /// let (hoverable_button, is_hovered) = use_hover(button);
 ///
 /// if is_hovered {
@@ -38,15 +44,16 @@ use crate::{
 /// ## With Conditional Styling
 /// ```rust,no_run
 /// # use pulse_core::hooks::hover::use_hover;
-/// # use pulse_core::prelude::*;
-/// # use ratatui::style::{Color, Style};
+/// # use pulse_core::{Component, IntoElement};
+/// # use ratatui::{Frame, layout::Rect, style::{Color, Style}};
+/// #[derive(Clone)]
+/// struct StyledButton { style: Style }
+/// impl Component for StyledButton {
+///     fn render(&self, _area: Rect, _frame: &mut Frame) {}
+/// }
 /// let base_style = Style::default().fg(Color::White);
 /// let hover_style = Style::default().fg(Color::Yellow);
-///
-/// let button_text = "Hover me!";
-/// let button = ratatui::widgets::Paragraph::new(button_text)
-///     .style(if is_hovered { hover_style } else { base_style });
-///
+/// let button = StyledButton { style: base_style };
 /// let (hoverable_button, is_hovered) = use_hover(button);
 /// ```
 ///
@@ -106,9 +113,14 @@ pub fn use_hover(content: impl IntoElement) -> (impl IntoElement, bool) {
 ///
 /// ```rust,no_run
 /// # use pulse_core::hooks::hover::use_hover_with_callbacks;
-/// # use pulse_core::prelude::*;
-/// let button = ratatui::widgets::Paragraph::new("Interactive Button");
-///
+/// # use pulse_core::{Component, IntoElement};
+/// # use ratatui::{Frame, layout::Rect};
+/// #[derive(Clone)]
+/// struct InteractiveButton;
+/// impl Component for InteractiveButton {
+///     fn render(&self, _area: Rect, _frame: &mut Frame) {}
+/// }
+/// let button = InteractiveButton;
 /// let (hoverable_button, is_hovered) = use_hover_with_callbacks(
 ///     button,
 ///     Some(|| println!("Mouse entered button area")),

@@ -47,6 +47,10 @@ path = "storage_showcase/src/main.rs"
 name = "sqlite_finance_tracker"
 path = "sqlite_finance_tracker/src/main.rs"
 
+[[bin]]
+name = "context_showcase"
+path = "context_showcase/src/main.rs"
+
 [features]
 default = ["sqlite"]
 sqlite = ["pulse/sqlite"]
