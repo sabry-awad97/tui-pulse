@@ -15,6 +15,7 @@ pub use pulse_core::{
         reducer::{DispatchFn, ReducerStateHandle, use_reducer},
         signal::{GlobalSignal, Signal, use_global_signal},
         state::{StateHandle, StateSetter, use_state},
+        storage::{LocalStorageConfig, set_storage_config, use_local_storage},
     },
 };
 pub use pulse_runtime::*;

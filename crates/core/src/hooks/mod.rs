@@ -9,6 +9,7 @@ pub mod interval;
 pub mod reducer;
 pub mod signal;
 pub mod state;
+pub mod storage;
 
 #[cfg(test)]
 pub mod test_utils;
