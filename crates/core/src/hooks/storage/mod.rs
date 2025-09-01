@@ -12,14 +12,18 @@
 //! - Support for both primitive and complex serializable types
 //! - Thread-safe operations for concurrent access
 
+use std::{any::Any, collections::HashMap, fs, path::PathBuf, sync::Arc};
+
 use crate::hooks::state::StateHandle;
 use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
-use std::any::Any;
-use std::collections::HashMap;
-use std::fs;
-use std::path::PathBuf;
-use std::sync::{Arc, OnceLock};
+use std::sync::OnceLock;
+
+#[cfg(feature = "sqlite")]
+use sqlx::{Row, sqlite::SqlitePool};
+
+#[cfg(feature = "sqlite")]
+use async_trait::async_trait;
 
 #[cfg(test)]
 mod tests;
@@ -140,6 +144,26 @@ pub trait StorageBackend: Send + Sync {
 
     /// Check if storage is available
     fn is_available(&self) -> bool;
+}
+
+/// Async storage backend trait for database-backed storage
+#[cfg(feature = "sqlite")]
+#[async_trait::async_trait]
+pub trait AsyncStorageBackend: Send + Sync {
+    /// Read a value from storage asynchronously
+    async fn read_async(&self, key: &str) -> LocalStorageResult<Option<String>>;
+
+    /// Write a value to storage asynchronously
+    async fn write_async(&self, key: &str, value: &str) -> LocalStorageResult<()>;
+
+    /// Remove a value from storage asynchronously
+    async fn remove_async(&self, key: &str) -> LocalStorageResult<()>;
+
+    /// Check if storage is available
+    fn is_available(&self) -> bool;
+
+    /// Initialize the storage backend (create tables, etc.)
+    async fn initialize(&self) -> LocalStorageResult<()>;
 }
 
 /// File-based storage backend
@@ -285,6 +309,164 @@ impl StorageBackend for MemoryStorageBackend {
 
     fn is_available(&self) -> bool {
         true
+    }
+}
+
+/// SQLite-based storage backend for persistent, database-backed storage
+#[cfg(feature = "sqlite")]
+#[derive(Debug)]
+pub struct SqliteStorageBackend {
+    pool: SqlitePool,
+    table_name: String,
+}
+
+#[cfg(feature = "sqlite")]
+impl SqliteStorageBackend {
+    /// Create a new SQLite storage backend
+    pub async fn new(database_url: &str) -> LocalStorageResult<Self> {
+        Self::new_with_table(database_url, "local_storage").await
+    }
+
+    /// Create a new SQLite storage backend with a custom table name
+    pub async fn new_with_table(database_url: &str, table_name: &str) -> LocalStorageResult<Self> {
+        // Add rwc mode to ensure read-write-create permissions, but only if not already specified
+        let url_with_mode = if database_url.contains("mode=") {
+            // User already specified a mode, use their URL as-is
+            database_url.to_string()
+        } else if database_url.contains('?') {
+            format!("{}&mode=rwc", database_url)
+        } else {
+            format!("{}?mode=rwc", database_url)
+        };
+
+        let pool = SqlitePool::connect(&url_with_mode).await.map_err(|e| {
+            LocalStorageError::ReadError(format!("Failed to connect to SQLite database: {}", e))
+        })?;
+
+        let backend = Self {
+            pool,
+            table_name: table_name.to_string(),
+        };
+
+        backend.initialize().await?;
+        Ok(backend)
+    }
+
+    /// Get the pool reference for advanced operations
+    pub fn pool(&self) -> &SqlitePool {
+        &self.pool
+    }
+
+    /// Get the table name
+    pub fn table_name(&self) -> &str {
+        &self.table_name
+    }
+}
+
+#[cfg(feature = "sqlite")]
+#[async_trait]
+impl AsyncStorageBackend for SqliteStorageBackend {
+    async fn read_async(&self, key: &str) -> LocalStorageResult<Option<String>> {
+        let query = format!("SELECT value FROM {} WHERE key = ?", self.table_name);
+
+        let result = sqlx::query(&query)
+            .bind(key)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| {
+                LocalStorageError::ReadError(format!("Failed to read from SQLite: {}", e))
+            })?;
+
+        match result {
+            Some(row) => {
+                let value: String = row.try_get("value").map_err(|e| {
+                    LocalStorageError::ReadError(format!(
+                        "Failed to extract value from SQLite row: {}",
+                        e
+                    ))
+                })?;
+                Ok(Some(value))
+            }
+            None => Ok(None),
+        }
+    }
+
+    async fn write_async(&self, key: &str, value: &str) -> LocalStorageResult<()> {
+        let query = format!(
+            "INSERT OR REPLACE INTO {} (key, value, updated_at) VALUES (?, ?, datetime('now'))",
+            self.table_name
+        );
+
+        sqlx::query(&query)
+            .bind(key)
+            .bind(value)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| {
+                LocalStorageError::WriteError(format!("Failed to write to SQLite: {}", e))
+            })?;
+
+        Ok(())
+    }
+
+    async fn remove_async(&self, key: &str) -> LocalStorageResult<()> {
+        let query = format!("DELETE FROM {} WHERE key = ?", self.table_name);
+
+        sqlx::query(&query)
+            .bind(key)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| {
+                LocalStorageError::WriteError(format!("Failed to remove from SQLite: {}", e))
+            })?;
+
+        Ok(())
+    }
+
+    fn is_available(&self) -> bool {
+        !self.pool.is_closed()
+    }
+
+    async fn initialize(&self) -> LocalStorageResult<()> {
+        let create_table_query = format!(
+            r#"
+            CREATE TABLE IF NOT EXISTS {} (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                created_at DATETIME DEFAULT (datetime('now')),
+                updated_at DATETIME DEFAULT (datetime('now'))
+            )
+            "#,
+            self.table_name
+        );
+
+        sqlx::query(&create_table_query)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| {
+                LocalStorageError::DirectoryCreationError(format!(
+                    "Failed to create SQLite table: {}",
+                    e
+                ))
+            })?;
+
+        // Create index for better performance
+        let create_index_query = format!(
+            "CREATE INDEX IF NOT EXISTS idx_{}_updated_at ON {} (updated_at)",
+            self.table_name, self.table_name
+        );
+
+        sqlx::query(&create_index_query)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| {
+                LocalStorageError::DirectoryCreationError(format!(
+                    "Failed to create SQLite index: {}",
+                    e
+                ))
+            })?;
+
+        Ok(())
     }
 }
 

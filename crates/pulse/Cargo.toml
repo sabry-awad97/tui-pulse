@@ -3,6 +3,10 @@ name = "pulse"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+default = []
+sqlite = ["pulse_core/sqlite"]
+
 [dependencies]
 pulse_core = { workspace = true }
 pulse_runtime = { workspace = true }
@@ -10,4 +14,4 @@ pulse_core_macros = { workspace = true }
 crossterm = { workspace = true }
 ratatui = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
-uuid = { workspace = true, features = ["v4"] }
+uuid = { workspace = true, features = ["v4", "serde"] }

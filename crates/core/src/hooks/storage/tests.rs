@@ -17,6 +17,11 @@ use std::sync::Barrier;
 use std::thread;
 use std::time::Duration;
 
+#[cfg(feature = "sqlite")]
+use tempfile::NamedTempFile;
+#[cfg(feature = "sqlite")]
+use tokio;
+
 // Global test mutex to ensure tests run sequentially
 static TEST_MUTEX: Mutex<()> = Mutex::new(());
 
@@ -419,4 +424,237 @@ fn test_storage_key_uniqueness() {
             assert_eq!(backend.len(), 2);
         });
     });
+}
+
+// SQLite Backend Tests
+#[cfg(feature = "sqlite")]
+mod sqlite_tests {
+    use super::*;
+
+    /// Helper function to create a temporary SQLite database for testing
+    async fn create_test_sqlite_backend() -> LocalStorageResult<SqliteStorageBackend> {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path().to_str().unwrap();
+        let database_url = format!("sqlite:{}", db_path);
+
+        SqliteStorageBackend::new(&database_url).await
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_backend_creation() {
+        let backend = create_test_sqlite_backend().await.unwrap();
+        assert!(backend.is_available());
+        assert_eq!(backend.table_name(), "local_storage");
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_backend_with_custom_table() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path().to_str().unwrap();
+        let database_url = format!("sqlite:{}", db_path);
+
+        let backend = SqliteStorageBackend::new_with_table(&database_url, "custom_table")
+            .await
+            .unwrap();
+        assert!(backend.is_available());
+        assert_eq!(backend.table_name(), "custom_table");
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_basic_operations() {
+        let backend = create_test_sqlite_backend().await.unwrap();
+
+        // Test write and read
+        backend.write_async("test_key", "test_value").await.unwrap();
+        let result = backend.read_async("test_key").await.unwrap();
+        assert_eq!(result, Some("test_value".to_string()));
+
+        // Test read non-existent key
+        let result = backend.read_async("non_existent").await.unwrap();
+        assert_eq!(result, None);
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_update_operation() {
+        let backend = create_test_sqlite_backend().await.unwrap();
+
+        // Initial write
+        backend
+            .write_async("update_key", "initial_value")
+            .await
+            .unwrap();
+        let result = backend.read_async("update_key").await.unwrap();
+        assert_eq!(result, Some("initial_value".to_string()));
+
+        // Update the value
+        backend
+            .write_async("update_key", "updated_value")
+            .await
+            .unwrap();
+        let result = backend.read_async("update_key").await.unwrap();
+        assert_eq!(result, Some("updated_value".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_remove_operation() {
+        let backend = create_test_sqlite_backend().await.unwrap();
+
+        // Write a value
+        backend
+            .write_async("remove_key", "remove_value")
+            .await
+            .unwrap();
+        let result = backend.read_async("remove_key").await.unwrap();
+        assert_eq!(result, Some("remove_value".to_string()));
+
+        // Remove the value
+        backend.remove_async("remove_key").await.unwrap();
+        let result = backend.read_async("remove_key").await.unwrap();
+        assert_eq!(result, None);
+
+        // Remove non-existent key (should not error)
+        backend.remove_async("non_existent").await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_complex_json_data() {
+        let backend = create_test_sqlite_backend().await.unwrap();
+
+        let test_data = TestData::default();
+        let json_value = serde_json::to_string(&test_data).unwrap();
+
+        // Store complex JSON data
+        backend
+            .write_async("complex_data", &json_value)
+            .await
+            .unwrap();
+        let result = backend.read_async("complex_data").await.unwrap();
+        assert_eq!(result, Some(json_value.clone()));
+
+        // Verify we can deserialize it back
+        let retrieved_data: TestData = serde_json::from_str(&result.unwrap()).unwrap();
+        assert_eq!(retrieved_data, test_data);
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_multiple_keys() {
+        let backend = create_test_sqlite_backend().await.unwrap();
+
+        // Store multiple key-value pairs
+        backend.write_async("key1", "value1").await.unwrap();
+        backend.write_async("key2", "value2").await.unwrap();
+        backend.write_async("key3", "value3").await.unwrap();
+
+        // Verify all values can be retrieved
+        assert_eq!(
+            backend.read_async("key1").await.unwrap(),
+            Some("value1".to_string())
+        );
+        assert_eq!(
+            backend.read_async("key2").await.unwrap(),
+            Some("value2".to_string())
+        );
+        assert_eq!(
+            backend.read_async("key3").await.unwrap(),
+            Some("value3".to_string())
+        );
+
+        // Remove one key and verify others remain
+        backend.remove_async("key2").await.unwrap();
+        assert_eq!(
+            backend.read_async("key1").await.unwrap(),
+            Some("value1".to_string())
+        );
+        assert_eq!(backend.read_async("key2").await.unwrap(), None);
+        assert_eq!(
+            backend.read_async("key3").await.unwrap(),
+            Some("value3".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_unicode_and_special_characters() {
+        let backend = create_test_sqlite_backend().await.unwrap();
+
+        let unicode_key = "🔑_key_测试";
+        let unicode_value = "🎯 Value with émojis and 中文 characters! @#$%^&*()";
+
+        backend
+            .write_async(unicode_key, unicode_value)
+            .await
+            .unwrap();
+        let result = backend.read_async(unicode_key).await.unwrap();
+        assert_eq!(result, Some(unicode_value.to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_concurrent_operations() {
+        let backend = Arc::new(create_test_sqlite_backend().await.unwrap());
+        let num_tasks = 10;
+        let mut handles = Vec::new();
+
+        // Spawn multiple concurrent write operations
+        for i in 0..num_tasks {
+            let backend_clone = backend.clone();
+            let handle = tokio::spawn(async move {
+                let key = format!("concurrent_key_{}", i);
+                let value = format!("concurrent_value_{}", i);
+                backend_clone.write_async(&key, &value).await.unwrap();
+
+                // Verify the write
+                let result = backend_clone.read_async(&key).await.unwrap();
+                assert_eq!(result, Some(value));
+            });
+            handles.push(handle);
+        }
+
+        // Wait for all tasks to complete
+        for handle in handles {
+            handle.await.unwrap();
+        }
+
+        // Verify all keys exist
+        for i in 0..num_tasks {
+            let key = format!("concurrent_key_{}", i);
+            let expected_value = format!("concurrent_value_{}", i);
+            let result = backend.read_async(&key).await.unwrap();
+            assert_eq!(result, Some(expected_value));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_error_handling() {
+        // Test with invalid database URL
+        let result = SqliteStorageBackend::new("invalid://database/url").await;
+        assert!(result.is_err());
+
+        if let Err(LocalStorageError::ReadError(msg)) = result {
+            assert!(msg.contains("Failed to connect to SQLite database"));
+        } else {
+            panic!("Expected ReadError for invalid database URL");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_sqlite_persistence_across_connections() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let db_path = temp_file.path().to_str().unwrap();
+        let database_url = format!("sqlite:{}", db_path);
+
+        // Create first backend and store data
+        {
+            let backend1 = SqliteStorageBackend::new(&database_url).await.unwrap();
+            backend1
+                .write_async("persistent_key", "persistent_value")
+                .await
+                .unwrap();
+        }
+
+        // Create second backend with same database and verify data persists
+        {
+            let backend2 = SqliteStorageBackend::new(&database_url).await.unwrap();
+            let result = backend2.read_async("persistent_key").await.unwrap();
+            assert_eq!(result, Some("persistent_value".to_string()));
+        }
+    }
 }

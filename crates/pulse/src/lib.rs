@@ -18,6 +18,10 @@ pub use pulse_core::{
         storage::{LocalStorageConfig, set_storage_config, use_local_storage},
     },
 };
+
+#[cfg(feature = "sqlite")]
+pub use pulse_core::hooks::storage::{AsyncStorageBackend, SqliteStorageBackend};
+
 pub use pulse_runtime::*;
 
 pub mod prelude {

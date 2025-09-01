@@ -43,6 +43,14 @@ path = "idle_showcase/src/main.rs"
 name = "storage_showcase"
 path = "storage_showcase/src/main.rs"
 
+[[bin]]
+name = "sqlite_finance_tracker"
+path = "sqlite_finance_tracker/src/main.rs"
+
+[features]
+default = ["sqlite"]
+sqlite = ["pulse/sqlite"]
+
 [dependencies]
 pulse = { workspace = true }
 tracing = { workspace = true }
@@ -58,3 +66,4 @@ rand = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 uuid = { workspace = true, features = ["v4"] }
 serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
